@@ -63,11 +63,13 @@ export default function PortfolioTable({
     } finally {
       setIsLoading(false);
     }
-  }, [credentials, portfolio, onPortfolioUpdate, setIsLoading, setError]);
+  }, [setIsLoading, setError, credentials, portfolio, onPortfolioUpdate]);
 
   useEffect(() => {
-    fetchBalances();
-  }, [fetchBalances]);
+    if (credentials) {
+      fetchBalances();
+    }
+  }, [credentials]);
 
   const addCoin = () => {
     const newItem: PortfolioItem = {
