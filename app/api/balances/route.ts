@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Binance from 'binance-api-node';
 
+interface BinanceBalance {
+  asset: string;
+  free: string;
+  locked: string;
+}
+
+interface BinanceAccountInfo {
+  balances: BinanceBalance[];
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { apiKey, secretKey } = await request.json();
@@ -19,11 +29,11 @@ export async function POST(request: NextRequest) {
     });
 
     // Get account balances
-    const accountInfo = await client.accountInfo();
+    const accountInfo: BinanceAccountInfo = await client.accountInfo();
     
     // Filter only spot balances with non-zero amounts
     const spotBalances = accountInfo.balances.filter(
-      (balance: any) => parseFloat(balance.free) > 0 || parseFloat(balance.locked) > 0
+      (balance: BinanceBalance) => parseFloat(balance.free) > 0 || parseFloat(balance.locked) > 0
     );
 
     // Get current prices for all coins
@@ -67,7 +77,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       balances,
       totalBalance,
-      spotBalances: spotBalances.map((balance: any) => ({
+      spotBalances: spotBalances.map((balance: BinanceBalance) => ({
         asset: balance.asset,
         free: balance.free,
         locked: balance.locked

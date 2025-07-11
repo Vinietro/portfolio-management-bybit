@@ -47,7 +47,7 @@ export default function Home() {
       // This will be handled by the PortfolioTable component
       // We just need to trigger a re-render
       setPortfolio([...portfolio]);
-    } catch (err) {
+    } catch {
       setError('Failed to refresh portfolio data');
     } finally {
       setIsLoading(false);
@@ -112,7 +112,6 @@ export default function Home() {
                 credentials={credentials}
                 portfolio={portfolio}
                 onPortfolioUpdate={handlePortfolioUpdate}
-                isLoading={isLoading}
                 setIsLoading={setIsLoading}
                 setError={setError}
               />

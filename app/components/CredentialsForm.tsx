@@ -39,7 +39,7 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
       }
 
       onSave({ apiKey, secretKey });
-    } catch (error) {
+    } catch {
       alert('Invalid credentials. Please check your API Key and Secret Key.');
     } finally {
       setIsLoading(false);

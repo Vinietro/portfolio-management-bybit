@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
 import { BinanceCredentials, PortfolioItem } from '../types';
 
@@ -8,7 +8,6 @@ interface PortfolioTableProps {
   credentials: BinanceCredentials;
   portfolio: PortfolioItem[];
   onPortfolioUpdate: (portfolio: PortfolioItem[]) => void;
-  isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
 }
@@ -17,18 +16,12 @@ export default function PortfolioTable({
   credentials,
   portfolio,
   onPortfolioUpdate,
-  isLoading,
   setIsLoading,
   setError
 }: PortfolioTableProps) {
   const [totalBalance, setTotalBalance] = useState<number>(0);
-  const [balances, setBalances] = useState<Record<string, number>>({});
 
-  useEffect(() => {
-    fetchBalances();
-  }, [credentials]);
-
-  const fetchBalances = async () => {
+  const fetchBalances = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
@@ -46,7 +39,6 @@ export default function PortfolioTable({
       }
 
       const data = await response.json();
-      setBalances(data.balances);
       setTotalBalance(data.totalBalance);
       
       // Update portfolio with current amounts
@@ -66,12 +58,16 @@ export default function PortfolioTable({
       });
 
       onPortfolioUpdate(updatedPortfolio);
-    } catch (error) {
+    } catch {
       setError('Failed to fetch portfolio data from Binance');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [credentials, portfolio, onPortfolioUpdate, setIsLoading, setError]);
+
+  useEffect(() => {
+    fetchBalances();
+  }, [fetchBalances]);
 
   const addCoin = () => {
     const newItem: PortfolioItem = {
@@ -233,7 +229,7 @@ export default function PortfolioTable({
       {portfolio.length === 0 && (
         <div className="text-center py-8 text-gray-500 dark:text-gray-400">
           <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p>No coins added yet. Click "Add Coin" to start building your portfolio.</p>
+          <p>No coins added yet. Click &quot;Add Coin&quot; to start building your portfolio.</p>
         </div>
       )}
     </div>
