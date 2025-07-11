@@ -84,11 +84,50 @@ export async function POST(request: NextRequest) {
       }))
     });
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error fetching balances:', error);
+    
+    let errorMessage = 'Failed to fetch balances from Binance';
+    let statusCode = 500;
+    let errorCode: number | undefined;
+
+    if (error && typeof error === 'object' && 'code' in error) {
+      errorCode = error.code as number;
+      
+      switch (errorCode) {
+        case -1022:
+          errorMessage = 'Signature validation failed. Please check your API credentials and try again.';
+          statusCode = 401;
+          break;
+        case -2015:
+        case -2014:
+        case -2013:
+          errorMessage = 'Invalid API credentials. Please verify your API key and secret.';
+          statusCode = 401;
+          break;
+        case -2011:
+          errorMessage = 'API key does not have the required permissions. Please check your API key permissions in Binance.';
+          statusCode = 401;
+          break;
+        case -1001:
+          errorMessage = 'Request timeout. Please try again.';
+          statusCode = 408;
+          break;
+        case -1003:
+          errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
+          statusCode = 429;
+          break;
+        default:
+          errorMessage = `API Error (${errorCode}): Failed to fetch balances`;
+      }
+    }
+
     return NextResponse.json(
-      { error: 'Failed to fetch balances from Binance' },
-      { status: 500 }
+      { 
+        error: errorMessage,
+        code: errorCode
+      },
+      { status: statusCode }
     );
   }
 } 

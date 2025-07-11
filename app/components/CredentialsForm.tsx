@@ -13,16 +13,18 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
   const [secretKey, setSecretKey] = useState('');
   const [showSecret, setShowSecret] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!apiKey.trim() || !secretKey.trim()) {
-      alert('Please enter both API Key and Secret Key');
+      setError('Please enter both API Key and Secret Key');
       return;
     }
 
     setIsLoading(true);
+    setError(null);
     
     try {
       // Test the credentials by making a simple API call
@@ -34,13 +36,16 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
         body: JSON.stringify({ apiKey, secretKey }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error('Invalid credentials');
+        throw new Error(data.error || 'Invalid credentials');
       }
 
       onSave({ apiKey, secretKey });
-    } catch {
-      alert('Invalid credentials. Please check your API Key and Secret Key.');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Invalid credentials. Please check your API Key and Secret Key.';
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -90,6 +95,14 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
           </button>
         </div>
       </div>
+
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <p className="text-sm text-red-800 dark:text-red-200">
+            <strong>Error:</strong> {error}
+          </p>
+        </div>
+      )}
 
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
         <p className="text-sm text-blue-800 dark:text-blue-200">
