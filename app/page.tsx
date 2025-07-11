@@ -18,7 +18,14 @@ export default function Home() {
     const savedPortfolio = localStorage.getItem('portfolio');
     
     if (savedCredentials) {
-      setCredentials(JSON.parse(savedCredentials));
+      const parsedCredentials = JSON.parse(savedCredentials);
+      // Ensure backward compatibility with existing saved credentials
+      setCredentials({
+        apiKey: parsedCredentials.apiKey,
+        secretKey: parsedCredentials.secretKey,
+        futuresWalletTarget: parsedCredentials.futuresWalletTarget,
+        usdcEarnTarget: parsedCredentials.usdcEarnTarget
+      });
     }
     
     if (savedPortfolio) {
@@ -112,6 +119,7 @@ export default function Home() {
                 credentials={credentials}
                 portfolio={portfolio}
                 onPortfolioUpdate={handlePortfolioUpdate}
+                onCredentialsUpdate={handleCredentialsSave}
                 setIsLoading={setIsLoading}
                 setError={setError}
               />

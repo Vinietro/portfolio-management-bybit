@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Eye, EyeOff, Key, Shield } from 'lucide-react';
+import { Eye, EyeOff, Key, Shield, DollarSign } from 'lucide-react';
 import { BinanceCredentials } from '../types';
 
 interface CredentialsFormProps {
@@ -11,6 +11,8 @@ interface CredentialsFormProps {
 export default function CredentialsForm({ onSave }: CredentialsFormProps) {
   const [apiKey, setApiKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
+  const [futuresWalletTarget, setFuturesWalletTarget] = useState('');
+  const [usdcEarnTarget, setUsdcEarnTarget] = useState('');
   const [showSecret, setShowSecret] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +44,12 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
         throw new Error(data.error || 'Invalid credentials');
       }
 
-      onSave({ apiKey, secretKey });
+      onSave({ 
+        apiKey, 
+        secretKey, 
+        futuresWalletTarget: futuresWalletTarget ? parseFloat(futuresWalletTarget) : undefined,
+        usdcEarnTarget: usdcEarnTarget ? parseFloat(usdcEarnTarget) : undefined
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Invalid credentials. Please check your API Key and Secret Key.';
       setError(errorMessage);
@@ -94,6 +101,52 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
             {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
+      </div>
+
+      <div>
+        <label htmlFor="futuresWalletTarget" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Futures Wallet Target (%)
+        </label>
+        <div className="relative">
+          <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            id="futuresWalletTarget"
+            type="number"
+            value={futuresWalletTarget}
+            onChange={(e) => setFuturesWalletTarget(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+            placeholder="Enter target percentage for futures wallet"
+            step="0.1"
+            min="0"
+            max="100"
+          />
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          Optional: Set your target percentage for the futures wallet (0-100%)
+        </p>
+      </div>
+
+      <div>
+        <label htmlFor="usdcEarnTarget" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          USDC Earn Target (%)
+        </label>
+        <div className="relative">
+          <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            id="usdcEarnTarget"
+            type="number"
+            value={usdcEarnTarget}
+            onChange={(e) => setUsdcEarnTarget(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+            placeholder="Enter target percentage for USDC in Earn wallet"
+            step="0.1"
+            min="0"
+            max="100"
+          />
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          Optional: Set your target percentage for USDC in Earn wallet (0-100%)
+        </p>
       </div>
 
       {error && (

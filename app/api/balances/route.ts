@@ -135,23 +135,40 @@ export async function POST(request: NextRequest) {
     // Get Earn wallet balances
     const earnBalances: BinanceEarnBalance[] = [];
     try {
-      // Try to get Simple Earn positions using direct API call
-      const earnPositions = await makeEarnRequest('/sapi/v1/simple-earn/flexible/position', apiKey, secretKey);
+      // Try to get Simple Earn positions using direct API call with pagination
+      let page = 1;
+      let hasMore = true;
       
-      if (earnPositions && earnPositions.rows && earnPositions.rows.length > 0) {
-        for (const position of earnPositions.rows) {
-          if (parseFloat(position.totalAmount) > 0) {
-            earnBalances.push({
-              asset: position.asset,
-              totalAmount: position.totalAmount,
-              tierAnnualPercentageRate: position.tierAnnualPercentageRate || '0',
-              latestAnnualPercentageRate: position.latestAnnualPercentageRate || '0',
-              yesterdayRealTimeRewards: position.yesterdayRealTimeRewards || '0',
-              totalBonusRewards: position.totalBonusRewards || '0',
-              totalRealTimeRewards: position.totalRealTimeRewards || '0',
-              totalRewards: position.totalRewards || '0'
-            });
+      while (hasMore) {
+        const earnPositions = await makeEarnRequest('/sapi/v1/simple-earn/flexible/position', apiKey, secretKey, {
+          current: page.toString(),
+          size: '100' // Maximum page size
+        });
+        
+        if (earnPositions && earnPositions.rows && earnPositions.rows.length > 0) {
+          for (const position of earnPositions.rows) {
+            if (parseFloat(position.totalAmount) > 0) {
+              earnBalances.push({
+                asset: position.asset,
+                totalAmount: position.totalAmount,
+                tierAnnualPercentageRate: position.tierAnnualPercentageRate || '0',
+                latestAnnualPercentageRate: position.latestAnnualPercentageRate || '0',
+                yesterdayRealTimeRewards: position.yesterdayRealTimeRewards || '0',
+                totalBonusRewards: position.totalBonusRewards || '0',
+                totalRealTimeRewards: position.totalRealTimeRewards || '0',
+                totalRewards: position.totalRewards || '0'
+              });
+            }
           }
+          
+          // Check if there are more pages
+          if (earnPositions.rows.length < 100) {
+            hasMore = false;
+          } else {
+            page++;
+          }
+        } else {
+          hasMore = false;
         }
       }
     } catch (earnError) {
