@@ -63,7 +63,7 @@ export default function PortfolioTable({
     } finally {
       setIsLoading(false);
     }
-  }, [setIsLoading, setError, credentials, portfolio, onPortfolioUpdate]);
+  }, [setIsLoading, setError, credentials, portfolio, onPortfolioUpdateReturn]);
 
   useEffect(() => {
     if (credentials) {

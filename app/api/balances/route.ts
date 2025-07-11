@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        balances[asset] = totalAmount;
+        balances[asset] = usdValue;
         totalBalance += usdValue;
       }
     }
