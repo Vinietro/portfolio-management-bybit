@@ -20,6 +20,17 @@ export default function PortfolioTable({
   setError
 }: PortfolioTableProps) {
   const [totalBalance, setTotalBalance] = useState<number>(0);
+  const [walletBalances, setWalletBalances] = useState<Record<string, Array<{
+    asset: string;
+    free: string;
+    locked: string;
+    usdValue: number;
+    wallet: string;
+  }>>>({
+    spot: [],
+    earn: [],
+    futures: []
+  });
 
   const fetchBalances = useCallback(async () => {
     setIsLoading(true);
@@ -40,6 +51,7 @@ export default function PortfolioTable({
 
       const data = await response.json();
       setTotalBalance(data.totalBalance);
+      setWalletBalances(data.walletBalances || { spot: [], earn: [], futures: [] });
       
       // Update portfolio with current amounts
       const updatedPortfolio = portfolio.map(item => {
@@ -132,6 +144,63 @@ export default function PortfolioTable({
           <Plus className="h-4 w-4" />
           Add Coin
         </button>
+      </div>
+
+      {/* Wallet Breakdown */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Spot Wallet</h3>
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            {walletBalances.spot.length > 0 ? (
+              <div className="space-y-1">
+                {walletBalances.spot.map((balance, index) => (
+                  <div key={index} className="flex justify-between">
+                    <span>{balance.asset}</span>
+                    <span className="font-medium">{formatCurrency(balance.usdValue)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <span className="text-gray-400">No balances</span>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Earn Wallet</h3>
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            {walletBalances.earn.length > 0 ? (
+              <div className="space-y-1">
+                {walletBalances.earn.map((balance, index) => (
+                  <div key={index} className="flex justify-between">
+                    <span>{balance.asset}</span>
+                    <span className="font-medium">{formatCurrency(balance.usdValue)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <span className="text-gray-400">No balances</span>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Futures Wallet</h3>
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            {walletBalances.futures.length > 0 ? (
+              <div className="space-y-1">
+                {walletBalances.futures.map((balance, index) => (
+                  <div key={index} className="flex justify-between">
+                    <span>{balance.asset}</span>
+                    <span className="font-medium">{formatCurrency(balance.usdValue)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <span className="text-gray-400">No balances</span>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="overflow-x-auto">

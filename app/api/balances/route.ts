@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Binance from 'binance-api-node';
+import crypto from 'crypto';
 
 interface BinanceBalance {
   asset: string;
@@ -9,6 +10,91 @@ interface BinanceBalance {
 
 interface BinanceAccountInfo {
   balances: BinanceBalance[];
+}
+
+interface BinanceEarnBalance {
+  asset: string;
+  totalAmount: string;
+  tierAnnualPercentageRate: string;
+  latestAnnualPercentageRate: string;
+  yesterdayRealTimeRewards: string;
+  totalBonusRewards: string;
+  totalRealTimeRewards: string;
+  totalRewards: string;
+}
+
+interface BinanceFuturesBalance {
+  accountAlias: string;
+  asset: string;
+  balance: string;
+  crossWalletBalance: string;
+  crossUnPnl: string;
+  availableBalance: string;
+  maxWithdrawAmount: string;
+}
+
+interface WalletBalance {
+  asset: string;
+  free: string;
+  locked: string;
+  usdValue: number;
+  wallet: string;
+}
+
+// Helper function to create signed request
+async function makeSignedRequest(endpoint: string, apiKey: string, secretKey: string, params: Record<string, string> = {}) {
+  const timestamp = Date.now().toString();
+  const queryString = Object.entries({ ...params, timestamp })
+    .map(([key, value]) => `${key}=${value}`)
+    .join('&');
+  
+  const signature = crypto
+    .createHmac('sha256', secretKey)
+    .update(queryString)
+    .digest('hex');
+
+  const url = `https://fapi.binance.com${endpoint}?${queryString}&signature=${signature}`;
+  
+  const response = await fetch(url, {
+    headers: {
+      'X-MBX-APIKEY': apiKey,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Futures API Error ${response.status}: ${errorText}`);
+  }
+
+  return response.json();
+}
+
+// Helper function to make earn API request
+async function makeEarnRequest(endpoint: string, apiKey: string, secretKey: string, params: Record<string, string> = {}) {
+  const timestamp = Date.now().toString();
+  const queryString = Object.entries({ ...params, timestamp })
+    .map(([key, value]) => `${key}=${value}`)
+    .join('&');
+  
+  const signature = crypto
+    .createHmac('sha256', secretKey)
+    .update(queryString)
+    .digest('hex');
+
+  const url = `https://api.binance.com${endpoint}?${queryString}&signature=${signature}`;
+  
+  const response = await fetch(url, {
+    headers: {
+      'X-MBX-APIKEY': apiKey,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Earn API Error ${response.status}: ${errorText}`);
+  }
+
+  return response.json();
 }
 
 export async function POST(request: NextRequest) {
@@ -28,22 +114,114 @@ export async function POST(request: NextRequest) {
       apiSecret: secretKey
     });
 
-    // Get account balances
-    const accountInfo: BinanceAccountInfo = await client.accountInfo();
-    
-    // Filter only spot balances with non-zero amounts
-    const spotBalances = accountInfo.balances.filter(
-      (balance: BinanceBalance) => parseFloat(balance.free) > 0 || parseFloat(balance.locked) > 0
-    );
-
     // Get current prices for all coins
     const tickerPrices = await client.prices();
     
     // Calculate USD values and total balance
     let totalBalance = 0;
     const balances: Record<string, number> = {};
+    const walletBalances: Record<string, WalletBalance[]> = {
+      spot: [],
+      earn: [],
+      futures: []
+    };
 
-    for (const balance of spotBalances) {
+    // Get Spot wallet balances
+    const accountInfo: BinanceAccountInfo = await client.accountInfo();
+    const spotBalances = accountInfo.balances.filter(
+      (balance: BinanceBalance) => parseFloat(balance.free) > 0 || parseFloat(balance.locked) > 0
+    );
+
+    // Get Earn wallet balances
+    const earnBalances: BinanceEarnBalance[] = [];
+    try {
+      // Try to get Simple Earn positions using direct API call
+      const earnPositions = await makeEarnRequest('/sapi/v1/simple-earn/flexible/position', apiKey, secretKey);
+      
+      if (earnPositions && earnPositions.rows && earnPositions.rows.length > 0) {
+        for (const position of earnPositions.rows) {
+          if (parseFloat(position.totalAmount) > 0) {
+            earnBalances.push({
+              asset: position.asset,
+              totalAmount: position.totalAmount,
+              tierAnnualPercentageRate: position.tierAnnualPercentageRate || '0',
+              latestAnnualPercentageRate: position.latestAnnualPercentageRate || '0',
+              yesterdayRealTimeRewards: position.yesterdayRealTimeRewards || '0',
+              totalBonusRewards: position.totalBonusRewards || '0',
+              totalRealTimeRewards: position.totalRealTimeRewards || '0',
+              totalRewards: position.totalRewards || '0'
+            });
+          }
+        }
+      }
+    } catch (earnError) {
+      console.log('Earn wallet not accessible or no positions:', earnError);
+      // Try alternative earn endpoint
+      try {
+        const earnAccount = await makeEarnRequest('/sapi/v1/simple-earn/account', apiKey, secretKey);
+        if (earnAccount && earnAccount.totalAmountInUSDT) {
+          earnBalances.push({
+            asset: 'USDT',
+            totalAmount: earnAccount.totalAmountInUSDT,
+            tierAnnualPercentageRate: '0',
+            latestAnnualPercentageRate: '0',
+            yesterdayRealTimeRewards: '0',
+            totalBonusRewards: '0',
+            totalRealTimeRewards: '0',
+            totalRewards: '0'
+          });
+        }
+      } catch (alternativeEarnError) {
+        console.log('Alternative earn method also failed:', alternativeEarnError);
+      }
+    }
+
+    // Get Futures wallet balances
+    const futuresBalances: BinanceFuturesBalance[] = [];
+    try {
+      // Get futures account information using direct API call
+      const futuresAccount = await makeSignedRequest('/fapi/v2/account', apiKey, secretKey);
+      
+      if (futuresAccount && futuresAccount.assets) {
+        for (const asset of futuresAccount.assets) {
+          const availableBalance = parseFloat(asset.availableBalance);
+          const walletBalance = parseFloat(asset.walletBalance);
+          
+          if (availableBalance > 0 || walletBalance > 0) {
+            futuresBalances.push({
+              accountAlias: futuresAccount.accountAlias || '',
+              asset: asset.asset,
+              balance: asset.walletBalance,
+              crossWalletBalance: asset.walletBalance,
+              crossUnPnl: asset.unrealizedPnl || '0',
+              availableBalance: asset.availableBalance,
+              maxWithdrawAmount: asset.maxWithdrawAmount || '0'
+            });
+          }
+        }
+      }
+    } catch (futuresError) {
+      console.log('Futures wallet not accessible or no positions:', futuresError);
+    }
+
+    // Process all balances and calculate USD values
+    const allBalances = [
+      ...spotBalances.map(b => ({ ...b, wallet: 'spot' })),
+      ...earnBalances.map(b => ({ 
+        asset: b.asset, 
+        free: b.totalAmount, 
+        locked: '0',
+        wallet: 'earn'
+      })),
+      ...futuresBalances.map(b => ({ 
+        asset: b.asset, 
+        free: b.availableBalance, 
+        locked: '0',
+        wallet: 'futures'
+      }))
+    ];
+
+    for (const balance of allBalances) {
       const asset = balance.asset;
       const freeAmount = parseFloat(balance.free);
       const lockedAmount = parseFloat(balance.locked);
@@ -69,18 +247,66 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        balances[asset] = usdValue;
+        // Add to total balances (combining all wallets)
+        balances[asset] = (balances[asset] || 0) + usdValue;
         totalBalance += usdValue;
+
+        // Store wallet-specific balances
+        if (balance.wallet === 'spot') {
+          walletBalances.spot.push({
+            asset: balance.asset,
+            free: balance.free,
+            locked: balance.locked,
+            usdValue,
+            wallet: 'spot'
+          });
+        } else if (balance.wallet === 'earn') {
+          walletBalances.earn.push({
+            asset: balance.asset,
+            free: balance.free,
+            locked: '0',
+            usdValue,
+            wallet: 'earn'
+          });
+        } else if (balance.wallet === 'futures') {
+          walletBalances.futures.push({
+            asset: balance.asset,
+            free: balance.free,
+            locked: '0',
+            usdValue,
+            wallet: 'futures'
+          });
+        }
       }
     }
 
     return NextResponse.json({
       balances,
       totalBalance,
+      walletBalances,
       spotBalances: spotBalances.map((balance: BinanceBalance) => ({
         asset: balance.asset,
         free: balance.free,
         locked: balance.locked
+      })),
+      earnBalances: earnBalances.map((balance: BinanceEarnBalance) => ({
+        asset: balance.asset,
+        totalAmount: balance.totalAmount,
+        tierAnnualPercentageRate: balance.tierAnnualPercentageRate,
+        latestAnnualPercentageRate: balance.latestAnnualPercentageRate,
+        yesterdayRealTimeRewards: balance.yesterdayRealTimeRewards,
+        totalBonusRewards: balance.totalBonusRewards,
+        totalRealTimeRewards: balance.totalRealTimeRewards,
+        totalRewards: balance.totalRewards
+      })),
+      futuresBalances: futuresBalances.map((balance: BinanceFuturesBalance) => ({
+        accountAlias: balance.accountAlias,
+        asset: balance.asset,
+        balance: balance.balance,
+        crossWalletBalance: balance.crossWalletBalance,
+        crossUnPnl: balance.crossUnPnl,
+        availableBalance: balance.availableBalance,
+        maxWithdrawAmount: balance.maxWithdrawAmount
       }))
     });
 
