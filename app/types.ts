@@ -13,6 +13,8 @@ export interface PortfolioItem {
   targetAmount?: number;
   currentPercent?: number;
   difference?: number;
+  pnl?: number;
+  pnlPercentage?: number;
   isUsdcEarn?: boolean; // Flag to identify USDC Earn allocation
 }
 
@@ -49,4 +51,15 @@ export interface WalletBalance {
   locked: string;
   usdValue: number;
   wallet: string;
+}
+
+export interface PnlData {
+  asset: string;
+  totalQuantity: number;
+  averagePrice: number;
+  currentPrice: number;
+  totalValue: number;
+  totalCost: number;
+  pnl: number;
+  pnlPercentage: number;
 } 

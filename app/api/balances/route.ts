@@ -39,6 +39,8 @@ interface WalletBalance {
   locked: string;
   usdValue: number;
   wallet: string;
+  pnl?: number;
+  pnlPercentage?: number;
 }
 
 // Helper function to create signed request
@@ -131,6 +133,38 @@ export async function POST(request: NextRequest) {
     const spotBalances = accountInfo.balances.filter(
       (balance: BinanceBalance) => parseFloat(balance.free) > 0 || parseFloat(balance.locked) > 0
     );
+
+    // Get PNL data for spot wallet coins
+    const spotAssets = spotBalances.map(balance => balance.asset).filter(asset => asset !== 'USDT' && asset !== 'USD');
+    const pnlData: Record<string, { pnl: number; pnlPercentage: number }> = {};
+    
+    if (spotAssets.length > 0) {
+      try {
+        const pnlResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/pnl`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            apiKey,
+            secretKey,
+            assets: spotAssets
+          }),
+        });
+
+        if (pnlResponse.ok) {
+          const pnlResult = await pnlResponse.json();
+          for (const pnlItem of pnlResult.pnlData || []) {
+            pnlData[pnlItem.asset] = {
+              pnl: pnlItem.pnl,
+              pnlPercentage: pnlItem.pnlPercentage
+            };
+          }
+        }
+      } catch (pnlError) {
+        console.log('Failed to fetch PNL data:', pnlError);
+      }
+    }
 
     // Get Earn wallet balances
     const earnBalances: BinanceEarnBalance[] = [];
@@ -270,12 +304,15 @@ export async function POST(request: NextRequest) {
 
         // Store wallet-specific balances
         if (balance.wallet === 'spot') {
+          const pnlInfo = pnlData[balance.asset];
           walletBalances.spot.push({
             asset: balance.asset,
             free: balance.free,
             locked: balance.locked,
             usdValue,
-            wallet: 'spot'
+            wallet: 'spot',
+            pnl: pnlInfo?.pnl,
+            pnlPercentage: pnlInfo?.pnlPercentage
           });
         } else if (balance.wallet === 'earn') {
           walletBalances.earn.push({

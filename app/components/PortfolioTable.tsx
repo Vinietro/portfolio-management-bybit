@@ -28,6 +28,8 @@ export default function PortfolioTable({
     locked: string;
     usdValue: number;
     wallet: string;
+    pnl?: number;
+    pnlPercentage?: number;
   }>>>({
     spot: [],
     earn: [],
@@ -67,12 +69,19 @@ export default function PortfolioTable({
         const currentPercent = availableBalance > 0 ? (currentAmount / availableBalance) * 100 : 0;
         const difference = targetAmount - currentAmount;
 
+        // Get PNL data for this coin from spot wallet
+        const spotBalance = data.walletBalances?.spot?.find((b: { asset: string; pnl?: number; pnlPercentage?: number }) => b.asset === item.coin);
+        const pnl = spotBalance?.pnl;
+        const pnlPercentage = spotBalance?.pnlPercentage;
+
         return {
           ...item,
           currentAmount,
           targetAmount,
           currentPercent,
-          difference
+          difference,
+          pnl,
+          pnlPercentage
         };
       });
 
@@ -244,9 +253,21 @@ export default function PortfolioTable({
             {walletBalances.spot.length > 0 ? (
               <div className="space-y-1">
                 {walletBalances.spot.map((balance, index) => (
-                  <div key={index} className="flex justify-between">
+                  <div key={index} className="flex justify-between items-center">
                     <span>{balance.asset}</span>
-                    <span className="font-medium">{formatCurrency(balance.usdValue)}</span>
+                    <div className="flex flex-col items-end">
+                      <span className="font-medium">{formatCurrency(balance.usdValue)}</span>
+                      {balance.pnl !== undefined && balance.pnlPercentage !== undefined && (
+                        <div className="flex items-center gap-1 text-xs">
+                          <span className={`${balance.pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {balance.pnl >= 0 ? '+' : ''}{formatCurrency(balance.pnl)}
+                          </span>
+                          <span className={`${balance.pnlPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            ({balance.pnlPercentage >= 0 ? '+' : ''}{balance.pnlPercentage.toFixed(2)}%)
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -516,6 +537,7 @@ export default function PortfolioTable({
               <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">Current Amount</th>
               <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">Current %</th>
               <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">Difference</th>
+              <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">PNL</th>
               <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">Actions</th>
             </tr>
           </thead>
@@ -580,6 +602,20 @@ export default function PortfolioTable({
                       ) : null}
                       <span className={`font-medium ${item.difference > 0 ? 'text-green-600' : item.difference < 0 ? 'text-red-600' : 'text-gray-600'}`}>
                         {formatNumber(Math.abs(item.difference))}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-gray-400">-</span>
+                  )}
+                </td>
+                <td className="py-3 px-4">
+                  {item.pnl !== undefined && item.pnlPercentage !== undefined ? (
+                    <div className="flex flex-col">
+                      <span className={`font-medium ${item.pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {item.pnl >= 0 ? '+' : ''}{formatCurrency(item.pnl)}
+                      </span>
+                      <span className={`text-xs ${item.pnlPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {item.pnlPercentage >= 0 ? '+' : ''}{item.pnlPercentage.toFixed(2)}%
                       </span>
                     </div>
                   ) : (
