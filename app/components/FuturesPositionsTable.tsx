@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { TrendingUp, TrendingDown, AlertTriangle, Zap, RefreshCw } from 'lucide-react';
 import { BinanceCredentials, FuturesPosition } from '../types';
 
@@ -19,7 +19,7 @@ export default function FuturesPositionsTable({
   const [totalPnl, setTotalPnl] = useState<number>(0);
   const [totalNotional, setTotalNotional] = useState<number>(0);
 
-  const fetchFuturesPositions = async () => {
+  const fetchFuturesPositions = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
@@ -45,7 +45,7 @@ export default function FuturesPositionsTable({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [credentials, setError, setIsLoading]);
 
   const handleRefresh = () => {
     fetchFuturesPositions();
@@ -55,7 +55,7 @@ export default function FuturesPositionsTable({
     if (credentials) {
       fetchFuturesPositions();
     }
-  }, [credentials]);
+  }, [credentials, fetchFuturesPositions]);
 
   const formatNumber = (num: number, decimals: number = 2) => {
     return new Intl.NumberFormat('en-US', {

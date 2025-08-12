@@ -46,13 +46,13 @@ export async function POST(request: NextRequest) {
     
     // Filter only open positions (positionAmt !== '0')
     const openPositions: FuturesPosition[] = positions
-      .filter((position: any) => parseFloat(position.positionAmt) !== 0)
-      .map((position: any) => {
-        const positionAmt = parseFloat(position.positionAmt);
-        const entryPrice = parseFloat(position.entryPrice);
-        const markPrice = parseFloat(position.markPrice);
-        const notional = parseFloat(position.notional);
-        const unRealizedProfit = parseFloat(position.unRealizedProfit);
+      .filter((position: Record<string, unknown>) => parseFloat(position.positionAmt as string) !== 0)
+      .map((position: Record<string, unknown>) => {
+        const positionAmt = parseFloat(position.positionAmt as string);
+        const entryPrice = parseFloat(position.entryPrice as string);
+        const markPrice = parseFloat(position.markPrice as string);
+        const notional = parseFloat(position.notional as string);
+        const unRealizedProfit = parseFloat(position.unRealizedProfit as string);
         
         // Determine position side
         const side = positionAmt > 0 ? 'LONG' : 'SHORT';
@@ -68,22 +68,22 @@ export async function POST(request: NextRequest) {
         const roe = notional > 0 ? (unRealizedProfit / notional) * 100 : 0;
 
         return {
-          symbol: position.symbol,
-          positionAmt: position.positionAmt,
-          entryPrice: position.entryPrice,
-          markPrice: position.markPrice,
-          unRealizedProfit: position.unRealizedProfit,
-          liquidationPrice: position.liquidationPrice,
-          leverage: position.leverage,
-          marginType: position.marginType,
-          isolatedMargin: position.isolatedMargin,
-          isAutoAddMargin: position.isAutoAddMargin,
-          positionSide: position.positionSide,
-          notional: position.notional,
-          isolatedWallet: position.isolatedWallet,
-          updateTime: position.updateTime,
+          symbol: position.symbol as string,
+          positionAmt: position.positionAmt as string,
+          entryPrice: position.entryPrice as string,
+          markPrice: position.markPrice as string,
+          unRealizedProfit: position.unRealizedProfit as string,
+          liquidationPrice: position.liquidationPrice as string,
+          leverage: position.leverage as string,
+          marginType: position.marginType as string,
+          isolatedMargin: position.isolatedMargin as string,
+          isAutoAddMargin: position.isAutoAddMargin as string,
+          positionSide: position.positionSide as string,
+          notional: position.notional as string,
+          isolatedWallet: position.isolatedWallet as string,
+          updateTime: position.updateTime as number,
           isolated: position.marginType === 'isolated',
-          adlQuantile: position.adlQuantile,
+          adlQuantile: position.adlQuantile as number,
           side,
           size,
           entryValue,

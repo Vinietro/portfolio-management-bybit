@@ -96,7 +96,7 @@ export default function PortfolioTable({
     if (credentials) {
       fetchBalances();
     }
-  }, [credentials]);
+  }, [credentials, fetchBalances]);
 
 
 
@@ -142,12 +142,7 @@ export default function PortfolioTable({
     };
   };
 
-  const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 6
-    }).format(num);
-  };
+
 
   const formatCurrency = (num: number) => {
     return new Intl.NumberFormat('en-US', {
