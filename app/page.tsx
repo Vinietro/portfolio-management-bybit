@@ -49,6 +49,11 @@ export default function Home() {
   const handleRefresh = async () => {
     if (!credentials) return;
     
+    // Don't refresh if there's already an error (especially rate limit errors)
+    if (error !== null && error.includes('rate limit')) {
+      return;
+    }
+    
     setIsLoading(true);
     setError(null);
     
@@ -77,11 +82,15 @@ export default function Home() {
             {credentials && (
               <button
                 onClick={handleRefresh}
-                disabled={isLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                disabled={isLoading || (error !== null && error.includes('rate limit'))}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                  error !== null && error.includes('rate limit')
+                    ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
+                }`}
               >
                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                Refresh
+                {error !== null && error.includes('rate limit') ? 'Rate Limited' : 'Refresh'}
               </button>
             )}
           </div>

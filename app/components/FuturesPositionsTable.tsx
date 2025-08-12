@@ -18,10 +18,33 @@ export default function FuturesPositionsTable({
   const [positions, setPositions] = useState<FuturesPosition[]>([]);
   const [totalPnl, setTotalPnl] = useState<number>(0);
   const [totalNotional, setTotalNotional] = useState<number>(0);
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
+  const [isRateLimited, setIsRateLimited] = useState<boolean>(false);
 
   const fetchFuturesPositions = useCallback(async () => {
+    // Check if we're rate limited
+    if (isRateLimited) {
+      const timeSinceLastFetch = Date.now() - lastFetchTime;
+      if (timeSinceLastFetch < 60000) { // 1 minute cooldown
+        const remainingTime = Math.ceil((60000 - timeSinceLastFetch) / 1000);
+        setError(`Rate limited. Please wait ${remainingTime} seconds before refreshing.`);
+        return;
+      } else {
+        setIsRateLimited(false);
+      }
+    }
+
+    // Prevent too frequent requests (minimum 30 seconds between requests)
+    const timeSinceLastFetch = Date.now() - lastFetchTime;
+    if (timeSinceLastFetch < 30000) {
+      const remainingTime = Math.ceil((30000 - timeSinceLastFetch) / 1000);
+      setError(`Please wait at least 30 seconds between refreshes. ${remainingTime} seconds remaining.`);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
+    setLastFetchTime(Date.now());
 
     try {
       const response = await fetch('/api/futures-positions', {
@@ -33,19 +56,30 @@ export default function FuturesPositionsTable({
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch futures positions');
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 429) {
+          setIsRateLimited(true);
+          setError(errorData.error || 'Rate limit exceeded. Please wait 1 minute before refreshing.');
+          return;
+        }
+        throw new Error(errorData.error || 'Failed to fetch futures positions');
       }
 
       const data = await response.json();
       setPositions(data.positions || []);
       setTotalPnl(data.totalPnl || 0);
       setTotalNotional(data.totalNotional || 0);
-    } catch {
-      setError('Failed to fetch futures positions from Binance');
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('rate limit')) {
+        setIsRateLimited(true);
+        setError('Rate limit exceeded. Please wait 1 minute before refreshing.');
+      } else {
+        setError('Failed to fetch futures positions from Binance');
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [credentials, setError, setIsLoading]);
+  }, [credentials, setError, setIsLoading, isRateLimited, lastFetchTime]);
 
   const handleRefresh = () => {
     fetchFuturesPositions();

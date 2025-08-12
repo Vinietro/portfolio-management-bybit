@@ -397,8 +397,21 @@ export async function POST(request: NextRequest) {
           errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
           statusCode = 429;
           break;
+        case -1015:
+          errorMessage = 'Too many requests. Please wait before refreshing again.';
+          statusCode = 429;
+          break;
         default:
           errorMessage = `API Error (${errorCode}): Failed to fetch balances`;
+      }
+    } else if (error && typeof error === 'object' && 'message' in error) {
+      const errorMsg = error.message as string;
+      if (errorMsg.includes('Too much request weight used')) {
+        errorMessage = 'Rate limit exceeded. Please wait 1 minute before refreshing again.';
+        statusCode = 429;
+      } else if (errorMsg.includes('request weight')) {
+        errorMessage = 'API rate limit reached. Please wait before making more requests.';
+        statusCode = 429;
       }
     }
 

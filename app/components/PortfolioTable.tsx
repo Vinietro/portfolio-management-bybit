@@ -34,10 +34,33 @@ export default function PortfolioTable({
     earn: [],
     futures: []
   });
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
+  const [isRateLimited, setIsRateLimited] = useState<boolean>(false);
 
   const fetchBalances = useCallback(async () => {
+    // Check if we're rate limited
+    if (isRateLimited) {
+      const timeSinceLastFetch = Date.now() - lastFetchTime;
+      if (timeSinceLastFetch < 60000) { // 1 minute cooldown
+        const remainingTime = Math.ceil((60000 - timeSinceLastFetch) / 1000);
+        setError(`Rate limited. Please wait ${remainingTime} seconds before refreshing.`);
+        return;
+      } else {
+        setIsRateLimited(false);
+      }
+    }
+
+    // Prevent too frequent requests (minimum 30 seconds between requests)
+    const timeSinceLastFetch = Date.now() - lastFetchTime;
+    if (timeSinceLastFetch < 30000) {
+      const remainingTime = Math.ceil((30000 - timeSinceLastFetch) / 1000);
+      setError(`Please wait at least 30 seconds between refreshes. ${remainingTime} seconds remaining.`);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
+    setLastFetchTime(Date.now());
 
     try {
       const response = await fetch('/api/balances', {
@@ -49,7 +72,13 @@ export default function PortfolioTable({
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch balances');
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 429) {
+          setIsRateLimited(true);
+          setError(errorData.error || 'Rate limit exceeded. Please wait 1 minute before refreshing.');
+          return;
+        }
+        throw new Error(errorData.error || 'Failed to fetch balances');
       }
 
       const data = await response.json();
@@ -85,12 +114,17 @@ export default function PortfolioTable({
       });
 
       onPortfolioUpdate(updatedPortfolio);
-    } catch {
-      setError('Failed to fetch portfolio data from Binance');
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('rate limit')) {
+        setIsRateLimited(true);
+        setError('Rate limit exceeded. Please wait 1 minute before refreshing.');
+      } else {
+        setError('Failed to fetch portfolio data from Binance');
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [setIsLoading, setError, credentials, portfolio, onPortfolioUpdate]);
+  }, [setIsLoading, setError, credentials, portfolio, onPortfolioUpdate, isRateLimited, lastFetchTime]);
 
   useEffect(() => {
     if (credentials) {
