@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { Wallet, Settings, RefreshCw, AlertCircle } from 'lucide-react';
 import CredentialsForm from './components/CredentialsForm';
 import PortfolioTable from './components/PortfolioTable';
+import CoinListTable from './components/CoinListTable';
+import FuturesPositionsTable from './components/FuturesPositionsTable';
 import { BinanceCredentials, PortfolioItem } from './types';
 
 export default function Home() {
@@ -63,7 +65,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      <div className="container mx-auto px-4 py-8">
+      <div className="px-4 py-8 w-full">
         <header className="mb-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -106,10 +108,11 @@ export default function Home() {
           </div>
         ) : (
           <div className="space-y-6">
+            {/* Portfolio Overview Card */}
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                  Portfolio Allocation
+                  Portfolio Overview
                 </h2>
                 <div className="text-sm text-gray-500 dark:text-gray-400">
                   Connected to Binance
@@ -120,6 +123,20 @@ export default function Home() {
                 portfolio={portfolio}
                 onPortfolioUpdate={handlePortfolioUpdate}
                 onCredentialsUpdate={handleCredentialsSave}
+                setIsLoading={setIsLoading}
+                setError={setError}
+              />
+            </div>
+            
+            {/* Coin List and Futures Positions Side by Side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <CoinListTable
+                portfolio={portfolio}
+                onPortfolioUpdate={handlePortfolioUpdate}
+              />
+              
+              <FuturesPositionsTable
+                credentials={credentials}
                 setIsLoading={setIsLoading}
                 setError={setError}
               />

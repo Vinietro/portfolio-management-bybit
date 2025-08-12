@@ -62,4 +62,30 @@ export interface PnlData {
   totalCost: number;
   pnl: number;
   pnlPercentage: number;
+}
+
+export interface FuturesPosition {
+  symbol: string;
+  positionAmt: string;
+  entryPrice: string;
+  markPrice: string;
+  unRealizedProfit: string;
+  liquidationPrice: string;
+  leverage: string;
+  marginType: string;
+  isolatedMargin: string;
+  isAutoAddMargin: string;
+  positionSide: string;
+  notional: string;
+  isolatedWallet: string;
+  updateTime: number;
+  isolated: boolean;
+  adlQuantile: number;
+  side: 'LONG' | 'SHORT';
+  size: number;
+  entryValue: number;
+  currentValue: number;
+  pnl: number;
+  pnlPercentage: number;
+  roe: number;
 } 
