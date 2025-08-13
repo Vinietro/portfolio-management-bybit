@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Binance from 'binance-api-node';
 import crypto from 'crypto';
+import { calculatePnlData } from '../../lib/pnl-calculator';
 
 interface BinanceBalance {
   asset: string;
@@ -136,35 +137,7 @@ export async function POST(request: NextRequest) {
 
     // Get PNL data for spot wallet coins
     const spotAssets = spotBalances.map(balance => balance.asset).filter(asset => asset !== 'USDT' && asset !== 'USD');
-    const pnlData: Record<string, { pnl: number; pnlPercentage: number }> = {};
-    
-    if (spotAssets.length > 0) {
-      try {
-        const pnlResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/pnl`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            apiKey,
-            secretKey,
-            assets: spotAssets
-          }),
-        });
-
-        if (pnlResponse.ok) {
-          const pnlResult = await pnlResponse.json();
-          for (const pnlItem of pnlResult.pnlData || []) {
-            pnlData[pnlItem.asset] = {
-              pnl: pnlItem.pnl,
-              pnlPercentage: pnlItem.pnlPercentage
-            };
-          }
-        }
-      } catch (pnlError) {
-        console.log('Failed to fetch PNL data:', pnlError);
-      }
-    }
+    const pnlData = await calculatePnlData(apiKey, secretKey, spotAssets);
 
     // Get Earn wallet balances
     const earnBalances: BinanceEarnBalance[] = [];
