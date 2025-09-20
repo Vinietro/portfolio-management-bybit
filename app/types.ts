@@ -2,7 +2,7 @@ export interface BinanceCredentials {
   apiKey: string;
   secretKey: string;
   futuresWalletTarget?: number; // Target percentage for futures wallet (0-100)
-  usdcEarnTarget?: number; // Target percentage for USDC in Earn wallet (0-100)
+  usdtEarnTarget?: number; // Target percentage for USDT in Earn wallet (0-100)
 }
 
 export interface PortfolioItem {
@@ -15,7 +15,7 @@ export interface PortfolioItem {
   difference?: number;
   pnl?: number;
   pnlPercentage?: number;
-  isUsdcEarn?: boolean; // Flag to identify USDC Earn allocation
+  isUsdtEarn?: boolean; // Flag to identify USDT Earn allocation
 }
 
 export interface BinanceBalance {

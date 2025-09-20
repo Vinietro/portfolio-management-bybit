@@ -12,7 +12,7 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
   const [apiKey, setApiKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
   const [futuresWalletTarget, setFuturesWalletTarget] = useState('');
-  const [usdcEarnTarget, setUsdcEarnTarget] = useState('');
+  const [usdtEarnTarget, setUsdtEarnTarget] = useState('');
   const [showSecret, setShowSecret] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +48,7 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
         apiKey, 
         secretKey, 
         futuresWalletTarget: futuresWalletTarget ? parseFloat(futuresWalletTarget) : undefined,
-        usdcEarnTarget: usdcEarnTarget ? parseFloat(usdcEarnTarget) : undefined
+        usdtEarnTarget: usdtEarnTarget ? parseFloat(usdtEarnTarget) : undefined
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Invalid credentials. Please check your API Key and Secret Key.';
@@ -127,25 +127,25 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
       </div>
 
       <div>
-        <label htmlFor="usdcEarnTarget" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          USDC Earn Target (%)
+        <label htmlFor="usdtEarnTarget" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          USDT Earn Target (%)
         </label>
         <div className="relative">
           <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
-            id="usdcEarnTarget"
+            id="usdtEarnTarget"
             type="number"
-            value={usdcEarnTarget}
-            onChange={(e) => setUsdcEarnTarget(e.target.value)}
+            value={usdtEarnTarget}
+            onChange={(e) => setUsdtEarnTarget(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-            placeholder="Enter target percentage for USDC in Earn wallet"
+            placeholder="Enter target percentage for USDT in Earn wallet"
             step="0.1"
             min="0"
             max="100"
           />
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          Optional: Set your target percentage for USDC in Earn wallet (0-100%)
+          Optional: Set your target percentage for USDT in Earn wallet (0-100%)
         </p>
       </div>
 

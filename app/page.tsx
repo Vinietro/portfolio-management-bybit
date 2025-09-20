@@ -26,7 +26,7 @@ export default function Home() {
         apiKey: parsedCredentials.apiKey,
         secretKey: parsedCredentials.secretKey,
         futuresWalletTarget: parsedCredentials.futuresWalletTarget,
-        usdcEarnTarget: parsedCredentials.usdcEarnTarget
+        usdtEarnTarget: parsedCredentials.usdtEarnTarget || parsedCredentials.usdcEarnTarget // Backward compatibility
       });
     }
     

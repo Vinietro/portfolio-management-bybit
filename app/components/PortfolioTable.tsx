@@ -86,10 +86,10 @@ export default function PortfolioTable({
       setWalletBalances(data.walletBalances || { spot: [], earn: [], futures: [] });
       
       // Update portfolio with current amounts
-      const currentUsdcInEarn = data.walletBalances?.earn
-        ?.filter((balance: { asset: string; usdValue: number }) => balance.asset === 'USDC')
+      const currentUsdtInEarn = data.walletBalances?.earn
+        ?.filter((balance: { asset: string; usdValue: number }) => balance.asset === 'USDT')
         ?.reduce((sum: number, balance: { asset: string; usdValue: number }) => sum + balance.usdValue, 0) || 0;
-      const availableBalance = data.totalBalance - currentUsdcInEarn;
+      const availableBalance = data.totalBalance - currentUsdtInEarn;
       
       const updatedPortfolio = portfolio.map(item => {
         const currentAmount = data.balances[item.coin] || 0;
@@ -135,31 +135,31 @@ export default function PortfolioTable({
 
 
   const getTotalTargetPercent = () => {
-    const regularCoins = portfolio.filter(item => !item.isUsdcEarn);
+    const regularCoins = portfolio.filter(item => !item.isUsdtEarn);
     return regularCoins.reduce((sum, item) => sum + item.targetPercent, 0);
   };
 
   const getRemainingAllocation = () => {
-    const usdcEarnPercent = credentials.usdcEarnTarget || 0;
+    const usdtEarnPercent = credentials.usdtEarnTarget || 0;
     const futuresPercent = credentials.futuresWalletTarget || 0;
-    const totalReserved = usdcEarnPercent + futuresPercent;
+    const totalReserved = usdtEarnPercent + futuresPercent;
     return Math.max(0, 100 - totalReserved);
   };
 
-  const getUsdcEarnTargetAmount = () => {
-    return (totalBalance * (credentials.usdcEarnTarget || 0)) / 100;
+  const getUsdtEarnTargetAmount = () => {
+    return (totalBalance * (credentials.usdtEarnTarget || 0)) / 100;
   };
 
-  const getCurrentUsdcInEarn = () => {
+  const getCurrentUsdtInEarn = () => {
     return walletBalances.earn
-      .filter(balance => balance.asset === 'USDC')
+      .filter(balance => balance.asset === 'USDT')
       .reduce((sum, balance) => sum + balance.usdValue, 0);
   };
 
-  const getUsdcEarnNeeded = () => {
-    const targetAmount = getUsdcEarnTargetAmount();
-    const currentUsdcInEarn = getCurrentUsdcInEarn();
-    return Math.max(0, targetAmount - currentUsdcInEarn);
+  const getUsdtEarnNeeded = () => {
+    const targetAmount = getUsdtEarnTargetAmount();
+    const currentUsdtInEarn = getCurrentUsdtInEarn();
+    return Math.max(0, targetAmount - currentUsdtInEarn);
   };
 
   const getSpotWalletMetrics = () => {
@@ -195,20 +195,20 @@ export default function PortfolioTable({
             Total Balance: <span className="font-semibold text-green-600">{formatCurrency(totalBalance)}</span>
           </div>
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            Available for Allocation: <span className="font-semibold text-blue-600">{formatCurrency(totalBalance - getCurrentUsdcInEarn())}</span>
+            Available for Allocation: <span className="font-semibold text-blue-600">{formatCurrency(totalBalance - getCurrentUsdtInEarn())}</span>
           </div>
           <div className="text-sm text-gray-600 dark:text-gray-400">
             Regular Allocation: <span className="font-semibold">{getTotalTargetPercent().toFixed(1)}%</span>
           </div>
           <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
-            <span>USDC Earn:</span>
+            <span>USDT Earn:</span>
             <input
               type="number"
-              value={credentials.usdcEarnTarget || ''}
+              value={credentials.usdtEarnTarget || ''}
               onChange={(e) => {
                 const value = parseFloat(e.target.value) || 0;
                 if (value >= 0 && value <= 100) {
-                  const updatedCredentials = { ...credentials, usdcEarnTarget: value };
+                  const updatedCredentials = { ...credentials, usdtEarnTarget: value };
                   localStorage.setItem('binanceCredentials', JSON.stringify(updatedCredentials));
                   onCredentialsUpdate(updatedCredentials);
                 }
@@ -245,10 +245,10 @@ export default function PortfolioTable({
           <div className="text-sm text-gray-600 dark:text-gray-400">
             Remaining: <span className="font-semibold text-purple-600">{getRemainingAllocation().toFixed(1)}%</span>
           </div>
-          {credentials.usdcEarnTarget && (
+          {credentials.usdtEarnTarget && (
             <div className="text-sm text-gray-600 dark:text-gray-400">
-              USDC Needed: <span className={`font-semibold ${getUsdcEarnNeeded() > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                {formatCurrency(getUsdcEarnNeeded())}
+              USDT Needed: <span className={`font-semibold ${getUsdtEarnNeeded() > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                {formatCurrency(getUsdtEarnNeeded())}
               </span>
             </div>
           )}
@@ -321,14 +321,14 @@ export default function PortfolioTable({
         <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-semibold text-gray-900 dark:text-white">Earn Wallet</h3>
-            {credentials.usdcEarnTarget && (
+            {credentials.usdtEarnTarget && (
               <button
                 onClick={() => {
-                  const newTarget = prompt('Enter new USDC Earn target (%):', credentials.usdcEarnTarget?.toString() || '0');
+                  const newTarget = prompt('Enter new USDT Earn target (%):', credentials.usdtEarnTarget?.toString() || '0');
                   if (newTarget !== null) {
                     const targetValue = parseFloat(newTarget);
                     if (!isNaN(targetValue) && targetValue >= 0 && targetValue <= 100) {
-                      const updatedCredentials = { ...credentials, usdcEarnTarget: targetValue };
+                      const updatedCredentials = { ...credentials, usdtEarnTarget: targetValue };
                       localStorage.setItem('binanceCredentials', JSON.stringify(updatedCredentials));
                       onCredentialsUpdate(updatedCredentials);
                     } else {
@@ -351,50 +351,50 @@ export default function PortfolioTable({
                     <span className="font-medium">{formatCurrency(balance.usdValue)}</span>
                   </div>
                 ))}
-                {/* Show USDC Earn target and difference */}
-                {credentials.usdcEarnTarget && (
+                {/* Show USDT Earn target and difference */}
+                {credentials.usdtEarnTarget && (
                   <>
                     <div className="border-t border-gray-200 dark:border-gray-600 pt-2 mt-2">
                       <div className="flex justify-between text-xs">
                         <span>Target %:</span>
-                        <span className="font-medium">{credentials.usdcEarnTarget.toFixed(1)}%</span>
+                        <span className="font-medium">{credentials.usdtEarnTarget.toFixed(1)}%</span>
                       </div>
                       <div className="flex justify-between text-xs">
                         <span>Target Amount:</span>
-                        <span className="font-medium">{formatCurrency(getUsdcEarnTargetAmount())}</span>
+                        <span className="font-medium">{formatCurrency(getUsdtEarnTargetAmount())}</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>Current USDC:</span>
+                        <span>Current USDT:</span>
                         <span className="font-medium">
-                          {formatCurrency(walletBalances.earn.filter(b => b.asset === 'USDC').reduce((sum, b) => sum + b.usdValue, 0))}
+                          {formatCurrency(walletBalances.earn.filter(b => b.asset === 'USDT').reduce((sum, b) => sum + b.usdValue, 0))}
                         </span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>Current USDC %:</span>
+                        <span>Current USDT %:</span>
                         <span className="font-medium">
-                          {totalBalance > 0 ? ((walletBalances.earn.filter(b => b.asset === 'USDC').reduce((sum, b) => sum + b.usdValue, 0) / totalBalance) * 100).toFixed(1) : '0.0'}%
+                          {totalBalance > 0 ? ((walletBalances.earn.filter(b => b.asset === 'USDT').reduce((sum, b) => sum + b.usdValue, 0) / totalBalance) * 100).toFixed(1) : '0.0'}%
                         </span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>USDC Difference:</span>
+                        <span>USDT Difference:</span>
                         <span className={`font-medium ${
-                          walletBalances.earn.filter(b => b.asset === 'USDC').reduce((sum, b) => sum + b.usdValue, 0) - getUsdcEarnTargetAmount() >= 0
+                          walletBalances.earn.filter(b => b.asset === 'USDT').reduce((sum, b) => sum + b.usdValue, 0) - getUsdtEarnTargetAmount() >= 0
                             ? 'text-green-600' 
                             : 'text-red-600'
                         }`}>
                           {formatCurrency(
-                            walletBalances.earn.filter(b => b.asset === 'USDC').reduce((sum, b) => sum + b.usdValue, 0) - getUsdcEarnTargetAmount()
+                            walletBalances.earn.filter(b => b.asset === 'USDT').reduce((sum, b) => sum + b.usdValue, 0) - getUsdtEarnTargetAmount()
                           )}
                         </span>
                       </div>
                       <div className={`flex justify-between text-xs p-2 rounded ${
-                        getUsdcEarnNeeded() > 0 ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800' : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+                        getUsdtEarnNeeded() > 0 ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800' : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
                       }`}>
-                        <span className="font-medium">USDC Needed:</span>
+                        <span className="font-medium">USDT Needed:</span>
                         <span className={`font-bold ${
-                          getUsdcEarnNeeded() > 0 ? 'text-red-600' : 'text-green-600'
+                          getUsdtEarnNeeded() > 0 ? 'text-red-600' : 'text-green-600'
                         }`}>
-                          {formatCurrency(getUsdcEarnNeeded())}
+                          {formatCurrency(getUsdtEarnNeeded())}
                         </span>
                       </div>
                     </div>
@@ -404,34 +404,34 @@ export default function PortfolioTable({
             ) : (
               <div className="space-y-1">
                 <span className="text-gray-400">No balances</span>
-                {credentials.usdcEarnTarget && (
+                {credentials.usdtEarnTarget && (
                   <div className="border-t border-gray-200 dark:border-gray-600 pt-2 mt-2">
                     <div className="flex justify-between text-xs">
                       <span>Target %:</span>
-                      <span className="font-medium">{credentials.usdcEarnTarget.toFixed(1)}%</span>
+                      <span className="font-medium">{credentials.usdtEarnTarget.toFixed(1)}%</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span>Target Amount:</span>
-                      <span className="font-medium">{formatCurrency(getUsdcEarnTargetAmount())}</span>
+                      <span className="font-medium">{formatCurrency(getUsdtEarnTargetAmount())}</span>
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span>Current USDC:</span>
+                      <span>Current USDT:</span>
                       <span className="font-medium">{formatCurrency(0)}</span>
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span>Current USDC %:</span>
+                      <span>Current USDT %:</span>
                       <span className="font-medium">0.0%</span>
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span>USDC Difference:</span>
+                      <span>USDT Difference:</span>
                       <span className="text-red-600 font-medium">
-                        {formatCurrency(-getUsdcEarnTargetAmount())}
+                        {formatCurrency(-getUsdtEarnTargetAmount())}
                       </span>
                     </div>
                       <div className="flex justify-between text-xs p-2 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-                        <span className="font-medium">USDC Needed:</span>
+                        <span className="font-medium">USDT Needed:</span>
                         <span className="text-red-600 font-bold">
-                          {formatCurrency(getUsdcEarnTargetAmount())}
+                          {formatCurrency(getUsdtEarnTargetAmount())}
                         </span>
                       </div>
                   </div>
@@ -503,7 +503,7 @@ export default function PortfolioTable({
                       </div>
                       <div className="flex justify-between text-xs">
                         <span>Target Amount:</span>
-                        <span className="font-medium">{formatCurrency(((totalBalance - getCurrentUsdcInEarn()) * credentials.futuresWalletTarget) / 100)}</span>
+                        <span className="font-medium">{formatCurrency(((totalBalance - getCurrentUsdtInEarn()) * credentials.futuresWalletTarget) / 100)}</span>
                       </div>
                       <div className="flex justify-between text-xs">
                         <span>Current:</span>
@@ -514,18 +514,18 @@ export default function PortfolioTable({
                       <div className="flex justify-between text-xs">
                         <span>Current %:</span>
                         <span className="font-medium">
-                          {(totalBalance - getCurrentUsdcInEarn()) > 0 ? ((walletBalances.futures.reduce((sum, b) => sum + b.usdValue, 0) / (totalBalance - getCurrentUsdcInEarn())) * 100).toFixed(1) : '0.0'}%
+                          {(totalBalance - getCurrentUsdtInEarn()) > 0 ? ((walletBalances.futures.reduce((sum, b) => sum + b.usdValue, 0) / (totalBalance - getCurrentUsdtInEarn())) * 100).toFixed(1) : '0.0'}%
                         </span>
                       </div>
                       <div className="flex justify-between text-xs">
                         <span>Difference:</span>
                         <span className={`font-medium ${
-                          walletBalances.futures.reduce((sum, b) => sum + b.usdValue, 0) - (((totalBalance - getCurrentUsdcInEarn()) * credentials.futuresWalletTarget) / 100) >= 0
+                          walletBalances.futures.reduce((sum, b) => sum + b.usdValue, 0) - (((totalBalance - getCurrentUsdtInEarn()) * credentials.futuresWalletTarget) / 100) >= 0
                             ? 'text-green-600' 
                             : 'text-red-600'
                         }`}>
                           {formatCurrency(
-                            walletBalances.futures.reduce((sum, b) => sum + b.usdValue, 0) - (((totalBalance - getCurrentUsdcInEarn()) * credentials.futuresWalletTarget) / 100)
+                            walletBalances.futures.reduce((sum, b) => sum + b.usdValue, 0) - (((totalBalance - getCurrentUsdtInEarn()) * credentials.futuresWalletTarget) / 100)
                           )}
                         </span>
                       </div>
@@ -544,7 +544,7 @@ export default function PortfolioTable({
                     </div>
                     <div className="flex justify-between text-xs">
                       <span>Target Amount:</span>
-                      <span className="font-medium">{formatCurrency(((totalBalance - getCurrentUsdcInEarn()) * credentials.futuresWalletTarget) / 100)}</span>
+                      <span className="font-medium">{formatCurrency(((totalBalance - getCurrentUsdtInEarn()) * credentials.futuresWalletTarget) / 100)}</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span>Current:</span>
@@ -557,7 +557,7 @@ export default function PortfolioTable({
                     <div className="flex justify-between text-xs">
                       <span>Difference:</span>
                       <span className="text-red-600 font-medium">
-                        {formatCurrency(-(((totalBalance - getCurrentUsdcInEarn()) * credentials.futuresWalletTarget) / 100))}
+                        {formatCurrency(-(((totalBalance - getCurrentUsdtInEarn()) * credentials.futuresWalletTarget) / 100))}
                       </span>
                     </div>
                   </div>
