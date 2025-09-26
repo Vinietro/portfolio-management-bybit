@@ -1,18 +1,19 @@
-# Binance API Setup for Spot and Earn Balances
+# Binance API Setup for Spot, Earn Balances and Trading
 
-This application supports fetching balances from two Binance wallets:
-- **Spot Wallet** - Regular trading balances
+This application supports:
+- **Spot Wallet** - Regular trading balances with PNL tracking
 - **Earn Wallet** - Simple Earn positions
+- **Trading** - Buy/sell orders to rebalance your portfolio
 
 ## Required API Permissions
 
-To access spot and earn balances, your Binance API key needs specific permissions:
+To access spot and earn balances and enable trading functionality, your Binance API key needs specific permissions:
 
 ### 1. Spot Trading Permissions
 1. Go to [Binance.com](https://www.binance.com) → API Management
 2. Select your API key or create a new one
 3. Enable the following permissions:
-   - ✅ **Enable Spot & Margin Trading** (for spot balances)
+   - ✅ **Enable Spot & Margin Trading** (for spot balances and trading)
    - ✅ **Enable Reading** (for balance information)
 
 ### 2. Simple Earn Permissions
@@ -21,9 +22,16 @@ To access spot and earn balances, your Binance API key needs specific permission
    - ✅ **Enable Simple Earn**
    - ✅ **Enable Reading** (for earn balance information)
 
-### 3. Security Settings
+### 3. Trading Permissions (Optional)
+For the buy/sell buttons to work, you need:
+   - ✅ **Enable Spot & Margin Trading** (already required above)
+   - ✅ **Enable Reading** (already required above)
+   
+**Note**: Trading functionality is optional. The application will work for balance tracking without trading permissions, but the buy/sell buttons will be disabled.
+
+### 4. Security Settings
 - **IP Restrictions**: Recommended to whitelist your IP address
-- **Trading Permissions**: Can be disabled if you only need to read balances
+- **Trading Permissions**: Required for buy/sell functionality
 - **Withdrawals**: Should be disabled for security
 
 ## API Endpoints Used
@@ -36,6 +44,11 @@ The application uses the following Binance API endpoints:
 ### Earn Balances
 - `GET /sapi/v1/simple-earn/flexible/position` - Simple Earn flexible positions
 - `GET /sapi/v1/simple-earn/account` - Simple Earn account summary (fallback)
+
+### Trading Operations
+- `GET /api/v3/account` - Account information for balance checks
+- `GET /api/v3/ticker/price` - Current market prices
+- `POST /api/v3/order` - Place buy/sell orders
 
 ## Error Handling
 
@@ -69,7 +82,8 @@ The application includes comprehensive error handling for common issues:
 1. Enter your API credentials in the application
 2. Click "Test Credentials" to verify basic connectivity
 3. Check the wallet breakdown to see balances from both wallets
-4. If earn balances don't appear, check the console for specific error messages
+4. Use the buy/sell buttons in the portfolio table to rebalance your positions
+5. If earn balances don't appear or trading fails, check the console for specific error messages
 
 ## Support
 

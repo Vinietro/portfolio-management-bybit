@@ -1,16 +1,39 @@
 'use client';
 
-import { Plus, Trash2, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
-import { PortfolioItem } from '../types';
+import { Plus, Trash2, DollarSign, TrendingUp, TrendingDown, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
+import { PortfolioItem, BinanceCredentials } from '../types';
 
 interface CoinListTableProps {
+  credentials: BinanceCredentials;
   portfolio: PortfolioItem[];
   onPortfolioUpdate: (portfolio: PortfolioItem[]) => void;
+  setIsLoading: (loading: boolean) => void;
+  setError: (error: string | null) => void;
+  walletBalances?: {
+    spot: Array<{
+      asset: string;
+      free: string;
+      locked: string;
+      usdValue: number;
+      wallet: string;
+    }>;
+    earn: Array<{
+      asset: string;
+      free: string;
+      locked: string;
+      usdValue: number;
+      wallet: string;
+    }>;
+  };
 }
 
 export default function CoinListTable({
+  credentials,
   portfolio,
-  onPortfolioUpdate
+  onPortfolioUpdate,
+  setIsLoading,
+  setError,
+  walletBalances
 }: CoinListTableProps) {
   const addCoin = () => {
     const newItem: PortfolioItem = {
@@ -33,6 +56,120 @@ export default function CoinListTable({
       return item;
     });
     onPortfolioUpdate(updatedPortfolio);
+  };
+
+  const handleBuyToTarget = async (item: PortfolioItem) => {
+    if (!item.coin || !item.difference || item.difference <= 0) {
+      setError('Cannot buy: Coin name is missing or already at/above target.');
+      return;
+    }
+    
+    const amountToBuy = item.difference;
+    const message = `Buy ${amountToBuy.toFixed(6)} ${item.coin} to reach your target allocation?\n\nThis will place a market buy order on Binance using your current balance.`;
+    
+    if (!confirm(message)) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/trading', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          apiKey: credentials.apiKey,
+          secretKey: credentials.secretKey,
+          symbol: item.coin,
+          side: 'BUY',
+          quantity: amountToBuy, // This will be converted to USD amount in the API
+          type: 'MARKET'
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to execute buy order');
+      }
+
+      alert(`Buy order executed successfully!\n\nOrder Details:\n- Symbol: ${data.symbol}\n- Quantity: ${data.quantity.toFixed(6)} ${data.symbol}\n- Price: ${data.price.toFixed(2)} USDT\n- Total Value: ${data.totalValue.toFixed(2)} USDT`);
+      
+      // Refresh portfolio data after successful trade
+      window.location.reload();
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to execute buy order';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSellAll = async (item: PortfolioItem) => {
+    if (!item.coin) {
+      setError('Cannot sell: Coin name is missing.');
+      return;
+    }
+
+    // Get actual coin quantity from wallet balances
+    const spotBalance = walletBalances?.spot?.find(b => b.asset === item.coin);
+    const actualCoinQuantity = spotBalance ? parseFloat(spotBalance.free) + parseFloat(spotBalance.locked) : 0;
+
+    if (actualCoinQuantity <= 0) {
+      setError(`Cannot sell: No ${item.coin} balance found in your wallet.`);
+      return;
+    }
+    
+    const message = `Sell entire position of ${actualCoinQuantity.toFixed(6)} ${item.coin}?\n\nThis will place a market sell order on Binance.`;
+    
+    if (!confirm(message)) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/trading', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          apiKey: credentials.apiKey,
+          secretKey: credentials.secretKey,
+          symbol: item.coin,
+          side: 'SELL',
+          quantity: actualCoinQuantity,
+          type: 'MARKET'
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Check if it's a balance error and show detailed information
+        if (data.availableBalance !== undefined && data.requestedQuantity !== undefined) {
+          throw new Error(`Insufficient ${data.symbol} balance. Available: ${data.availableBalance.toFixed(6)} ${data.symbol}, Requested: ${data.requestedQuantity.toFixed(6)} ${data.symbol}. Please check your actual balance in Binance.`);
+        }
+        throw new Error(data.error || 'Failed to execute sell order');
+      }
+
+      alert(`Sell order executed successfully!\n\nOrder Details:\n- Symbol: ${data.symbol}\n- Quantity: ${data.quantity.toFixed(6)} ${data.symbol}\n- Price: ${data.price.toFixed(2)} USDT\n- Total Value: ${data.totalValue.toFixed(2)} USDT`);
+      
+      // Refresh portfolio data after successful trade
+      window.location.reload();
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to execute sell order';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const formatNumber = (num: number) => {
@@ -165,12 +302,37 @@ export default function CoinListTable({
                   )}
                 </td>
                 <td className="py-3 px-4">
-                  <button
-                    onClick={() => removeCoin(item.id)}
-                    className="text-red-500 hover:text-red-700 transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleBuyToTarget(item)}
+                      disabled={!item.coin || !item.difference || item.difference <= 0}
+                      className="text-green-500 hover:text-green-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                      title="Buy remaining amount to reach target"
+                    >
+                      <ArrowUpCircle className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleSellAll(item)}
+                      disabled={(() => {
+                        if (!item.coin) return true;
+                        const spotBalance = walletBalances?.spot?.find(b => b.asset === item.coin);
+                        const actualCoinQuantity = spotBalance ? parseFloat(spotBalance.free) + parseFloat(spotBalance.locked) : 0;
+                        return actualCoinQuantity <= 0;
+                      })()}
+                      className="text-red-500 hover:text-red-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                      title="Sell entire position"
+                    >
+                      <ArrowDownCircle className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => removeCoin(item.id)}
+                      disabled={false}
+                      className="text-red-500 hover:text-red-700 transition-colors"
+                      title="Remove coin from portfolio"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

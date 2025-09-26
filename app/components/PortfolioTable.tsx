@@ -10,6 +10,24 @@ interface PortfolioTableProps {
   onCredentialsUpdate: (credentials: BinanceCredentials) => void;
   setIsLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  onWalletBalancesUpdate?: (walletBalances: {
+    spot: Array<{
+      asset: string;
+      free: string;
+      locked: string;
+      usdValue: number;
+      wallet: string;
+      pnl?: number;
+      pnlPercentage?: number;
+    }>;
+    earn: Array<{
+      asset: string;
+      free: string;
+      locked: string;
+      usdValue: number;
+      wallet: string;
+    }>;
+  }) => void;
 }
 
 export default function PortfolioTable({
@@ -18,7 +36,8 @@ export default function PortfolioTable({
   onPortfolioUpdate,
   onCredentialsUpdate,
   setIsLoading,
-  setError
+  setError,
+  onWalletBalancesUpdate
 }: PortfolioTableProps) {
   const [totalBalance, setTotalBalance] = useState<number>(0);
   const [walletBalances, setWalletBalances] = useState<Record<string, Array<{
@@ -82,7 +101,13 @@ export default function PortfolioTable({
 
       const data = await response.json();
       setTotalBalance(data.totalBalance);
-      setWalletBalances(data.walletBalances || { spot: [], earn: [] });
+      const newWalletBalances = data.walletBalances || { spot: [], earn: [] };
+      setWalletBalances(newWalletBalances);
+      
+      // Notify parent component of wallet balances update
+      if (onWalletBalancesUpdate) {
+        onWalletBalancesUpdate(newWalletBalances);
+      }
       
       // Update portfolio with current amounts
       const currentUsdtInEarn = data.walletBalances?.earn

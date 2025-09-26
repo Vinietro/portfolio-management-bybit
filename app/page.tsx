@@ -12,6 +12,24 @@ export default function Home() {
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [walletBalances, setWalletBalances] = useState<{
+    spot: Array<{
+      asset: string;
+      free: string;
+      locked: string;
+      usdValue: number;
+      wallet: string;
+      pnl?: number;
+      pnlPercentage?: number;
+    }>;
+    earn: Array<{
+      asset: string;
+      free: string;
+      locked: string;
+      usdValue: number;
+      wallet: string;
+    }>;
+  }>({ spot: [], earn: [] });
 
   useEffect(() => {
     // Load saved credentials and portfolio from localStorage
@@ -42,6 +60,10 @@ export default function Home() {
   const handlePortfolioUpdate = (newPortfolio: PortfolioItem[]) => {
     setPortfolio(newPortfolio);
     localStorage.setItem('portfolio', JSON.stringify(newPortfolio));
+  };
+
+  const handleWalletBalancesUpdate = (newWalletBalances: typeof walletBalances) => {
+    setWalletBalances(newWalletBalances);
   };
 
   const handleRefresh = async () => {
@@ -132,14 +154,19 @@ export default function Home() {
                 onCredentialsUpdate={handleCredentialsSave}
                 setIsLoading={setIsLoading}
                 setError={setError}
+                onWalletBalancesUpdate={handleWalletBalancesUpdate}
               />
             </div>
             
             {/* Coin List */}
             <div className="grid grid-cols-1 gap-6">
               <CoinListTable
+                credentials={credentials}
                 portfolio={portfolio}
                 onPortfolioUpdate={handlePortfolioUpdate}
+                setIsLoading={setIsLoading}
+                setError={setError}
+                walletBalances={walletBalances}
               />
             </div>
           </div>
