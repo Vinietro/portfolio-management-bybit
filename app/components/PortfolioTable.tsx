@@ -187,6 +187,36 @@ export default function PortfolioTable({
       } else {
         setError('Failed to fetch portfolio data from Binance');
       }
+      
+      // FALLBACK: Ensure allocation data is always displayed, even when API call fails
+      if (portfolio && portfolio.length > 0) {
+        console.log('🔄 PortfolioTable: API failed - triggering fallback allocation calculation');
+        
+        const defaultTotalBalance = 10000; // Fallback balance assumption when API fails  
+        const defaultUsdtEarnPercent = credentials?.usdtEarnTarget || 0;
+        const availableBalanceForCalculation = defaultTotalBalance * (100 - defaultUsdtEarnPercent) / 100;
+        setAvailableForAllocation(availableBalanceForCalculation);
+        
+        const updatedPortfolio = portfolio.map(item => {
+          const currentAmount = 0; // Default for "API unavailable" fallback  
+          const targetAmount = (availableBalanceForCalculation * item.targetPercent) / 100;
+          const currentPercent = 0; // Default when no live balance data
+          const difference = targetAmount - currentAmount;
+
+          return {
+            ...item,
+            currentAmount,
+            targetAmount,
+            currentPercent,
+            difference,
+            pnl: 0,
+            pnlPercentage: 0
+          };
+        });
+        
+        console.log('🔄 PortfolioTable: Updated portfolio with fallback allocation after API failure:', updatedPortfolio.length);
+        onPortfolioUpdate(updatedPortfolio);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -214,11 +244,42 @@ export default function PortfolioTable({
   }, [credentials]);
 
   useEffect(() => {
-    if (credentials && portfolio && portfolio.length > 0) {
-      console.log('🚀 PortfolioTable: Triggering balance fetch for', portfolio.length, 'coins');
-      fetchBalances();
+    if (portfolio && portfolio.length > 0) {
+      console.log('🚀 PortfolioTable: Portfolio condition met with', portfolio.length, 'coins - processing allocation calculations');
+      if (credentials) {
+        console.log('📈 PortfolioTable: Credentials available, fetching balance data from Binance API');
+        fetchBalances();
+      } else {
+        console.log('📊 PortfolioTable: No credentials, calculating basic allocation targets without API data');
+        
+        // Ensure core allocation data shows even without credentials/API access  
+        const defaultTotalBalance = 10000; // Conservative default for allocation display
+        const defaultUsdtEarnPercent = 0; // Default percentage since no credentials
+        const availableBalanceForCalculation = defaultTotalBalance * (100 - defaultUsdtEarnPercent) / 100;
+        setAvailableForAllocation(availableBalanceForCalculation);
+        
+        const updatedPortfolio = portfolio.map(item => {
+          const currentAmount = 0; // Default to show "BUY X COIN" instructions  
+          const targetAmount = (availableBalanceForCalculation * item.targetPercent) / 100;
+          const currentPercent = 0; // Default when no live balance data available
+          const difference = targetAmount - currentAmount;
+
+          return {
+            ...item,
+            currentAmount,
+            targetAmount, 
+            currentPercent,
+            difference,
+            pnl: 0,
+            pnlPercentage: 0
+          };
+        });
+        
+        console.log('🔄 PortfolioTable: Updated portfolio with basic allocation targets:', updatedPortfolio.length);
+        onPortfolioUpdate(updatedPortfolio);
+      }
     }
-  }, [credentials, portfolio, fetchBalances]);
+  }, [credentials, portfolio, fetchBalances, onPortfolioUpdate]);
 
   useEffect(() => {
     if (credentials?.apiKey) {

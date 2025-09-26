@@ -6,6 +6,7 @@ import CredentialsForm from './components/CredentialsForm';
 import PortfolioTable from './components/PortfolioTable';
 import CoinListTable from './components/CoinListTable';
 import { BinanceCredentials, PortfolioItem } from './types';
+import { SyncManager } from './lib/sync';
 
 export default function Home() {
   const [credentials, setCredentials] = useState<BinanceCredentials | null>(null);
@@ -79,9 +80,26 @@ export default function Home() {
 
 
   const handleCredentialsSave = async (creds: BinanceCredentials) => {
+    // Save to localStorage first  
     setCredentials(creds);
     localStorage.setItem('binanceCredentials', JSON.stringify(creds));
     setError(null);
+    
+    // Save to database in background (non-blocking)
+    try {
+      const syncManager = new SyncManager();
+      const syncResult = await syncManager.syncCredentials(creds as unknown as Record<string, unknown>);
+      
+      if (!syncResult.success) {
+        console.error('Failed to sync credentials to database:', syncResult.error);
+        // This is logged but doesn't prevent successful login
+      } else {
+        console.log('Credentials synced to database successfully');
+      }
+    } catch (error) {
+      console.error('Error syncing credentials to database:', error);
+      // Failed database sync doesn't prevent successful login
+    }
   };
 
   const handlePortfolioUpdate = async (newPortfolio: PortfolioItem[]) => {
@@ -95,6 +113,11 @@ export default function Home() {
     setWalletBalances(newWalletBalances);
   };
 
+  const handleDisconnect = () => {
+    setCredentials(null);
+    localStorage.removeItem('binanceCredentials');
+    setError(null);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
@@ -160,6 +183,7 @@ export default function Home() {
                 portfolio={portfolio}
                 setIsLoading={setIsLoading}
                 setError={setError}
+                onDisconnect={handleDisconnect}
                 walletBalances={walletBalances}
               />
             </div>

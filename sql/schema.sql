@@ -61,6 +61,9 @@ CREATE INDEX IF NOT EXISTS idx_default_coins_order ON default_coins(display_orde
 CREATE INDEX IF NOT EXISTS idx_trading_transactions_api_key ON trading_transactions(api_key_hash);
 CREATE INDEX IF NOT EXISTS idx_trading_transactions_symbol ON trading_transactions(symbol);
 CREATE INDEX IF NOT EXISTS idx_trading_transactions_created_at ON trading_transactions(created_at);
+CREATE INDEX IF NOT EXISTS idx_position_status_api_key ON position_status(api_key_hash);
+CREATE INDEX IF NOT EXISTS idx_position_status_symbol ON position_status(symbol);
+CREATE INDEX IF NOT EXISTS idx_position_status_is_open ON position_status(is_open);
 
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -96,6 +99,22 @@ CREATE TABLE IF NOT EXISTS trading_transactions (
   transaction_type TEXT NOT NULL CHECK (transaction_type IN ('entry', 'exit')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Create position status table for tracking open/closed positions
+CREATE TABLE IF NOT EXISTS position_status (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  api_key_hash TEXT NOT NULL,     -- Hashed API key for identification
+  symbol TEXT NOT NULL,           -- Trading symbol (e.g., BTC, ETH)
+  is_open BOOLEAN DEFAULT FALSE,   -- Position status: true = open, false = closed
+  last_transaction_type TEXT,      -- Last transaction type (entry/exit)
+  last_transaction_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(api_key_hash, symbol)     -- One record per symbol per user
+);
+
+CREATE TRIGGER update_position_status_updated_at BEFORE UPDATE ON position_status
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Insert default coins data
 INSERT INTO default_coins (coin_symbol, target_percentage, display_order) VALUES 

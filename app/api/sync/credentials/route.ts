@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOrCreateUser, saveCredentials, getCredentials, generateDeviceId } from '../../../lib/database';
+import { getOrCreateUser, saveCredentials, getCredentials, generateDeviceId, deleteCredentials } from '../../../lib/database';
 
 export async function POST(request: NextRequest) {
   try {
@@ -81,6 +81,51 @@ export async function GET(request: NextRequest) {
     console.error('Credentials fetch error:', error);
     
     let errorMessage = 'Failed to fetch credentials';
+    if (error && typeof error === 'object' && 'message' in error) {
+      errorMessage = error.message as string;
+    }
+
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const deviceId = searchParams.get('deviceId');
+
+    if (!deviceId) {
+      return NextResponse.json(
+        { error: 'Device ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Get user
+    const userId = await getOrCreateUser(deviceId);
+    
+    // Delete credentials
+    const result = await deleteCredentials(userId, deviceId);
+    
+    if (result.success) {
+      return NextResponse.json({
+        success: true,
+        message: 'Credentials disconnected successfully'
+      });
+    } else {
+      return NextResponse.json({
+        success: false,
+        message: result.message || 'No credentials found to disconnect'
+      });
+    }
+
+  } catch (error: unknown) {
+    console.error('Credentials disconnect error:', error);
+    
+    let errorMessage = 'Failed to disconnect credentials';
     if (error && typeof error === 'object' && 'message' in error) {
       errorMessage = error.message as string;
     }

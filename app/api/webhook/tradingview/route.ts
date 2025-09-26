@@ -88,9 +88,30 @@ async function unstakeUSDTFromEarn(apiKey: string, secretKey: string, amount: nu
       const availableAmount = parseFloat(position.totalAmount || '0');
       const unstakeAmount = Math.min(remainingAmount, availableAmount);
       
-      if (unstakeAmount > 0.001) { // Only unstake if meaningful amount
-        // Execute unstaking
-        const unstakeQueryString = `productId=${position.productId}&type=FAST&amount=${unstakeAmount}&timestamp=${timestamp}`;
+      console.log(`Checking position: ${position.productId}, Available: ${availableAmount}, Attempting to unstake: ${unstakeAmount}`);
+      
+      if (unstakeAmount > 0.001 && position.productId) { // Only unstake if meaningful amount and position has valid product ID
+        // Execute unstaking - format amount to ensure proper API formatting
+        const formattedAmount = parseFloat(unstakeAmount.toFixed(8));
+        
+        if (formattedAmount > availableAmount) {
+          console.log(`Skipping position - unstaking amount ${formattedAmount} exceeds available ${availableAmount}`);
+          continue;
+        }
+        
+        if (!position.productId || formattedAmount <= 0) {
+          console.log(`Skipping position - invalid productId or amount: productId=${position.productId}, amount=${formattedAmount}`);
+          continue;
+        }
+        
+        console.log(`Attempting to unstake ${formattedAmount} USDT from position ${position.productId}`);
+        
+        // Ensure amount is sent as a proper decimal string for the API
+        const amountString = formattedAmount.toFixed(8);
+        const unstakeQueryString = `productId=${position.productId}&type=FAST&amount=${amountString}&timestamp=${timestamp}`;
+        
+        console.log(`Unstaking query: ${unstakeQueryString}`);
+        
         const unstakeSignature = crypto
           .createHmac('sha256', secretKey)
           .update(unstakeQueryString)
@@ -197,7 +218,14 @@ async function executeMarketTrade(symbol: string, side: 'BUY' | 'SELL', quantity
     }
     const priceData = await priceResponse.json();
     currentPrice = parseFloat(priceData.price);
+    
+    // Double-check we have enough USDT for this trade
+    if (sideUSD <= 0) {
+      throw new Error(`Invalid trade amount: ${sideUSD} USDT`);
+    }
+    
     orderQuantity = sideUSD / currentPrice;
+    console.log(`Converting ${sideUSD} USDT to ${symbol}: Price ${currentPrice}, Quantity needed: ${orderQuantity}`);
   } else {
     orderQuantity = quantity;
   }
@@ -240,6 +268,39 @@ async function executeMarketTrade(symbol: string, side: 'BUY' | 'SELL', quantity
     const fallbackMinimum = 5.0; // USDT 
     if (notionalValue < fallbackMinimum) {
       throw new Error(`Too small amount for trading. Estimated minimum value is ${fallbackMinimum} USDT, you only have ${notionalValue.toFixed(2)} USDT worth allocated. Increase allocation for this coin to meet minimum trading requirements.`);
+    }
+  }
+
+  // Final balance validation before attempting trade - check if available balance is sufficient for actual trade value
+  if (side === 'BUY') {
+    try {
+      const timestampForBalance = Date.now().toString();
+      const queryStringForBalance = `timestamp=${timestampForBalance}`;
+      const signatureForBalance = crypto
+        .createHmac('sha256', secretKey)
+        .update(queryStringForBalance)
+        .digest('hex');
+
+      const urlForBalance = `https://api.binance.com/api/v3/account?${queryStringForBalance}&signature=${signatureForBalance}`;
+      const balanceCheckResponse = await fetch(urlForBalance, {
+        headers: {
+          'X-MBX-APIKEY': apiKey,
+        },
+      });
+
+      if (balanceCheckResponse.ok) {
+        const balanceData = await balanceCheckResponse.json();
+        const usdtBalance = balanceData.balances.find((b: { asset: string; free: string }) => b.asset === 'USDT');
+        const availableUSDT = usdtBalance ? parseFloat(usdtBalance.free) : 0;
+        
+        console.log(`Pre-execution balance check: Available ${availableUSDT.toFixed(4)} USDT vs trade value ${notionalValue.toFixed(4)} USDT`);
+        
+        if (availableUSDT < notionalValue) {
+          throw new Error(`Insufficient balance for trade: Available ${availableUSDT.toFixed(4)} USDT, need ${notionalValue.toFixed(4)} USDT for trade (order qty: ${orderQuantity.toFixed(2)} ${symbol})`);
+        }
+      }
+    } catch (balanceCheckError) {
+      console.log(`Final balance check failed, proceeding with trade: ${balanceCheckError instanceof Error ? balanceCheckError.message : 'Unknown error'}`);
     }
   }
 
@@ -340,8 +401,51 @@ async function recordTransaction(
         NOW()
       )
     `;
+    
+    // Track position status after transaction
+    await trackPositionStatus(apiKey, symbol, transactionType);
   } catch (error) {
     console.error('Error recording transaction:', error);
+  }
+}
+
+// Helper function to track position status (open/closed)
+async function trackPositionStatus(
+  apiKey: string, 
+  symbol: string, 
+  transactionType: 'entry' | 'exit'
+) {
+  try {
+    const apiKeyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
+    const isOpen = transactionType === 'entry';
+    
+    await sql`
+      INSERT INTO position_status (
+        api_key_hash,
+        symbol,
+        is_open,
+        last_transaction_type,
+        last_transaction_date,
+        created_at,
+        updated_at
+      ) VALUES (
+        ${apiKeyHash},
+        ${symbol},
+        ${isOpen},
+        ${transactionType},
+        NOW(),
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT (api_key_hash, symbol) 
+      DO UPDATE SET
+        is_open = ${isOpen},
+        last_transaction_type = ${transactionType},
+        last_transaction_date = NOW(),
+        updated_at = NOW()
+    `;
+  } catch (error) {
+    console.error('Error tracking position status:', error);
   }
 }
 
@@ -485,6 +589,21 @@ export async function POST(request: NextRequest) {
           
           console.log(`Webhook ${apiKey.substring(0,8)}... - USDT Balance: ${totalBalanceFromAPI} USDT, USDT Earn Reserve: ${usdtEarnPercent}%, Available for Trading: ${availableForAllocation} USDT`);
           
+          // Additional validation that we actually have funds available
+          if (availableForAllocation <= 0.1) {
+            accountResults.push({
+              success: false,
+              symbol: 'BALANCE',
+              side: 'BUY' as const,
+              quantity: 0,
+              price: 0,
+              totalValue: 0,
+              order: null,
+              message: `Insufficient USDT balance to trade: ${availableForAllocation.toFixed(2)} USDT available (minimum 0.1 USDT required)`
+            });
+            worldResults.push({apiKey, userId, results: accountResults});
+            continue; // Skip to next credential set
+          }
           
           for (const coinData of filterCoins) {
             const coinSymbol = coinData.coin.includes('USDT') ? coinData.coin.substring(0, coinData.coin.indexOf('USDT')) : coinData.coin;
@@ -494,26 +613,78 @@ export async function POST(request: NextRequest) {
             console.log(`Webhook ${coinSymbol}: ${coinData.targetPercent}% of ${availableForAllocation} USDT = ${allocatedAmount} USDT allocation`);
             
             try {
-              // Check if we have enough USDT balance  
+              // Check final USDT balance before trading attempt - check both free and total
               const currentAccountInfo = await getAccountInfo(apiKey, secretKey);
               const currentUSDTBalance = currentAccountInfo.balances.find((b: { asset: string; free: string; locked: string }) => b.asset === 'USDT');
-              const availableUSDTAfterCheck = currentUSDTBalance 
-                ? parseFloat(currentUSDTBalance.free) + parseFloat(currentUSDTBalance.locked) 
-                : 0;
+              const freeUSDT = currentUSDTBalance ? parseFloat(currentUSDTBalance.free) : 0;
+              const lockedUSDT = currentUSDTBalance ? parseFloat(currentUSDTBalance.locked) : 0;
+              const availableUSDTAfterCheck = freeUSDT + lockedUSDT;
               
-              // If not enough USDT, try to unstake from Earn wallet
-              if (availableUSDTAfterCheck < allocatedAmount && allocatedAmount > availableUSDTAfterCheck + 1) {
-                const neededAmount = allocatedAmount - availableUSDTAfterCheck;
+              console.log(`Pre-trade USDT check for ${coinSymbol}: Free ${freeUSDT.toFixed(4)}, Locked ${lockedUSDT.toFixed(4)}, Total ${availableUSDTAfterCheck.toFixed(4)} USDT, Needed ${allocatedAmount.toFixed(4)} USDT`);
+              
+              // Always try the trade first with free USDT, if insufficient then fallback to unstaking
+              const canTradeOnlyFreeUSDT = freeUSDT >= allocatedAmount;
+              if (!canTradeOnlyFreeUSDT) {
+                console.log(`Cannot trade with available free USDT (${freeUSDT.toFixed(4)}), will proceed with unstaking if locked funds exist`);
+              }
+              
+            // If not enough FREE USDT, try to unstake from Earn wallet
+            // Add small buffer (0.01 USDT) for the order formatting differences
+            const bufferedNeededAmount = allocatedAmount * 1.001; // 0.1% buffer to cover any rounding differences due to LOT_SIZE etc
+            if (freeUSDT < bufferedNeededAmount && allocatedAmount >= 0.1) {
+              const neededAmount = bufferedNeededAmount - freeUSDT;
+              console.log(`Insufficient FREE USDT balance detected (${freeUSDT.toFixed(4)} free, need ${bufferedNeededAmount.toFixed(4)} with buffer 0.1%). Attempting to unstake ${neededAmount.toFixed(4)} USDT from Earn wallet`);
+                
                 const unstakeResult = await unstakeUSDTFromEarn(apiKey, secretKey, neededAmount);
                 
                 if (!unstakeResult.success) {
-                  console.log(`Could not unstake USDT: ${unstakeResult.message}`);
-                  // Continue anyway - maybe other errors are user-specific
-                } else {
-                  console.log(`Unstaked ${unstakeResult.unstakedAmount} USDT for trading: ${unstakeResult.message}`);
+                  console.log(`Unstaking failed: ${unstakeResult.message}`);
                   
-                  // Wait a moment for the unstaking to process
-                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  // Recheck final balance to ensure we've given a real balance report
+                  const finalAccountInfo = await getAccountInfo(apiKey, secretKey);
+                  const finalUSDTBalanceCheck = finalAccountInfo.balances.find((b: { asset: string; free: string; locked: string }) => b.asset === 'USDT');
+                  const finalBalanceValue = finalUSDTBalanceCheck 
+                    ? parseFloat(finalUSDTBalanceCheck.free) + parseFloat(finalUSDTBalanceCheck.locked) 
+                    : 0;
+                  
+                  throw new Error(`Insufficient USDT balance (${finalBalanceValue.toFixed(2)} USDT available, ${bufferedNeededAmount.toFixed(2)} USDT needed). Could not unstake additional USDT: ${unstakeResult.message}`);
+                } else {
+                  console.log(`Successfully unstaked ${unstakeResult.unstakedAmount} USDT for trading: ${unstakeResult.message}`);
+                  
+                  // Wait a bit longer for the unstaking to process and recheck balance
+                  console.log('Waiting for unstaking to process...');
+                  await new Promise(resolve => setTimeout(resolve, 5000));
+                  
+                  // Recheck balance after unstaking - check FREE USDT only as that's what's available for trading
+                  const updatedAccountInfo = await getAccountInfo(apiKey, secretKey);
+                  const updatedUSDTBalance = updatedAccountInfo.balances.find((b: { asset: string; free: string; locked: string }) => b.asset === 'USDT');
+                  const finalFreeUSDT = updatedUSDTBalance ? parseFloat(updatedUSDTBalance.free) : 0;
+                  const finalLockedUSDT = updatedUSDTBalance ? parseFloat(updatedUSDTBalance.locked) : 0;
+                    
+                  console.log(`Post-unstaking USDT balance check: FREE ${finalFreeUSDT.toFixed(4)}, LOCKED ${finalLockedUSDT.toFixed(4)}, required FREE ${bufferedNeededAmount.toFixed(4)} USDT`);
+                  
+                  if (finalFreeUSDT < bufferedNeededAmount - 0.01) { // Allow small tolerance for decimal precision
+                    throw new Error(`Still insufficient FREE USDT after unstaking: ${finalFreeUSDT.toFixed(2)} USDT free available, ${bufferedNeededAmount.toFixed(2)} USDT needed (unstaked: ${unstakeResult.unstakedAmount})`);
+                  }
+                  console.log(`✅ Balance verification passed, proceeding with trade`);
+                }
+              } else {
+                console.log(`Insufficient free USDT, attempting unstaking anyways`);
+                
+                // As final fallback, if FREE USDT is not sufficient but total is, try unstaking anyway
+                if (freeUSDT < bufferedNeededAmount && availableUSDTAfterCheck > freeUSDT && allocatedAmount >= 0.1) {
+                  const alternativeNeededAmount = bufferedNeededAmount - freeUSDT;
+                  console.log(`Attempting final unstaking attempt: ${alternativeNeededAmount.toFixed(4)} USDT from Earn wallet`);
+                  
+                  const alternativeUnstakeResult = await unstakeUSDTFromEarn(apiKey, secretKey, alternativeNeededAmount);
+                  if (!alternativeUnstakeResult.success) {
+                    throw new Error(`Final attempt failed - insufficient USDT (${freeUSDT.toFixed(2)} free, ${bufferedNeededAmount.toFixed(2)} needed). Cannot unstake: ${alternativeUnstakeResult.message}`);
+                  }
+                  
+                  console.log(`Final unstaking successful: ${alternativeUnstakeResult.unstakedAmount} USDT unstaked`);
+                  await new Promise(resolve => setTimeout(resolve, 3000)); // Short wait before trade
+                } else {
+                  throw new Error(`Insufficient USDT: only ${freeUSDT.toFixed(2)} free available, need ${bufferedNeededAmount.toFixed(2)} USDT`);
                 }
               }
 

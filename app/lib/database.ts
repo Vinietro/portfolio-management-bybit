@@ -191,6 +191,31 @@ export async function getCredentials(userId: string) {
   }
 }
 
+export async function deleteCredentials(userId: string, deviceId: string) {
+  try {
+    const result = await sql`
+      DELETE FROM credentials 
+      WHERE user_id = ${userId}
+      RETURNING id
+    `;
+    
+    if (result.length > 0) {
+      // Log sync operation
+      await sql`
+        INSERT INTO sync_log (user_id, table_name, record_id, operation, device_id)
+        VALUES (${userId}, 'credentials', ${result[0].id}, 'delete', ${deviceId})
+      `;
+      
+      return { success: true, deletedRecordId: result[0].id };
+    }
+    
+    return { success: false, message: 'No credentials found to delete' };
+  } catch (error) {
+    console.error('Error deleting credentials:', error);
+    throw error;
+  }
+}
+
 // Sync management
 export async function getSyncStatus(userId: string, lastSyncTime?: string) {
   try {
@@ -327,6 +352,46 @@ export async function calculatePortfolioPNL(apiKeyHash: string) {
     };
   } catch (error) {
     console.error('Error calculating portfolio PNL:', error);
+    throw error;
+  }
+}
+
+// Position status functions
+export async function getPositionStatus(apiKeyHash: string, symbol?: string) {
+  try {
+    let query = sql`
+      SELECT symbol, is_open, last_transaction_type, last_transaction_date
+      FROM position_status 
+      WHERE api_key_hash = ${apiKeyHash}
+    `;
+    
+    if (symbol) {
+      query = sql`
+        SELECT symbol, is_open, last_transaction_type, last_transaction_date
+        FROM position_status 
+        WHERE api_key_hash = ${apiKeyHash} AND symbol = ${symbol}
+      `;
+    }
+    
+    const rows = await query;
+    return rows;
+  } catch (error) {
+    console.error('Error getting position status:', error);
+    throw error;
+  }
+}
+
+export async function getPositionStatusBySymbols(apiKeyHash: string, symbols: string[]) {
+  try {
+    const rows = await sql`
+      SELECT symbol, is_open, last_transaction_type, last_transaction_date
+      FROM position_status 
+      WHERE api_key_hash = ${apiKeyHash} 
+      AND symbol = ANY(${symbols})
+    `;
+    return rows;
+  } catch (error) {
+    console.error('Error getting position status by symbols:', error);
     throw error;
   }
 }

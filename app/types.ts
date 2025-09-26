@@ -15,6 +15,7 @@ export interface PortfolioItem {
   pnl?: number;
   pnlPercentage?: number;
   isUsdtEarn?: boolean; // Flag to identify USDT Earn allocation
+  positionStatus?: 'open' | 'closed' | 'unknown';
 }
 
 export interface BinanceBalance {

@@ -134,10 +134,16 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
       )}
 
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <p className="text-sm text-blue-800 dark:text-blue-200">
-          <strong>Security Note:</strong> Your credentials are stored locally in your browser and are never sent to our servers. 
-          Make sure to create API keys with read-only permissions for security.
-        </p>
+        <div className="text-sm text-blue-800 dark:text-blue-200">
+          <p className="font-semibold mb-2">🔐 Security & Privacy:</p>
+          <ul className="space-y-1 text-xs">
+            <li>• Your API credentials are encrypted and stored securely in our database for automation features</li>
+            <li>• We encrypt all API keys before storing them and they&apos;re never stored in plain text</li>
+            <li>• Only create API keys with READ-ONLY trading permissions (spot wallet, balance view)</li>
+            <li>• Your credentials enable automated webhook trading - always use trading API keys cautiously</li>
+            <li>• You can disconnect and remove your API keys at any time using the disconnect button</li>
+          </ul>
+        </div>
       </div>
 
       <button
