@@ -70,7 +70,7 @@ async function getExchangeInfo(symbol: string) {
 }
 
 // Helper function to format quantity according to LOT_SIZE filter
-function formatQuantity(quantity: number, lotSizeFilter: any): number {
+function formatQuantity(quantity: number, lotSizeFilter: { stepSize: string; minQty: string; maxQty: string }): number {
   const stepSize = parseFloat(lotSizeFilter.stepSize);
   const minQty = parseFloat(lotSizeFilter.minQty);
   const maxQty = parseFloat(lotSizeFilter.maxQty);
@@ -155,8 +155,8 @@ export async function POST(request: NextRequest) {
     const exchangeInfo = await getExchangeInfo(symbol);
     console.log('Exchange info received:', exchangeInfo);
     
-    const lotSizeFilter = exchangeInfo.filters.find((f: any) => f.filterType === 'LOT_SIZE');
-    const minNotionalFilter = exchangeInfo.filters.find((f: any) => f.filterType === 'MIN_NOTIONAL');
+    const lotSizeFilter = exchangeInfo.filters.find((f: { filterType: string }) => f.filterType === 'LOT_SIZE');
+    const minNotionalFilter = exchangeInfo.filters.find((f: { filterType: string }) => f.filterType === 'MIN_NOTIONAL');
     
     console.log('Filters found:', { lotSizeFilter, minNotionalFilter });
     
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
       
       // Check if user has enough USDT balance
       const accountInfo = await getAccountInfo(apiKey, secretKey);
-      const usdtBalance = accountInfo.balances.find((b: any) => b.asset === 'USDT');
+      const usdtBalance = accountInfo.balances.find((b: { asset: string }) => b.asset === 'USDT');
       const availableUsdt = parseFloat(usdtBalance?.free || '0');
       
       if (availableUsdt < quantity) {
@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
       const accountInfo = await getAccountInfo(apiKey, secretKey);
       console.log('Account info received, looking for balance of:', symbol);
       
-      const coinBalance = accountInfo.balances.find((b: any) => b.asset === symbol);
+      const coinBalance = accountInfo.balances.find((b: { asset: string }) => b.asset === symbol);
       console.log('Coin balance found:', coinBalance);
       
       const availableCoin = parseFloat(coinBalance?.free || '0');

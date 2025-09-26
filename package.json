@@ -13,7 +13,8 @@
     "react-dom": "^18.2.0",
     "next": "15.3.5",
     "binance-api-node": "^0.12.7",
-    "lucide-react": "^0.263.1"
+    "lucide-react": "^0.263.1",
+    "@neondatabase/serverless": "^0.9.0"
   },
   "devDependencies": {
     "typescript": "^5",

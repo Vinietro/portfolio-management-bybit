@@ -35,33 +35,6 @@ interface WalletBalance {
   pnlPercentage?: number;
 }
 
-// Helper function to create signed request
-async function makeSignedRequest(endpoint: string, apiKey: string, secretKey: string, params: Record<string, string> = {}) {
-  const timestamp = Date.now().toString();
-  const queryString = Object.entries({ ...params, timestamp })
-    .map(([key, value]) => `${key}=${value}`)
-    .join('&');
-  
-  const signature = crypto
-    .createHmac('sha256', secretKey)
-    .update(queryString)
-    .digest('hex');
-
-  const url = `https://fapi.binance.com${endpoint}?${queryString}&signature=${signature}`;
-  
-  const response = await fetch(url, {
-    headers: {
-      'X-MBX-APIKEY': apiKey,
-    },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Futures API Error ${response.status}: ${errorText}`);
-  }
-
-  return response.json();
-}
 
 // Helper function to make earn API request
 async function makeEarnRequest(endpoint: string, apiKey: string, secretKey: string, params: Record<string, string> = {}) {

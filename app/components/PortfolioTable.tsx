@@ -58,22 +58,26 @@ export default function PortfolioTable({
   const fetchBalances = useCallback(async () => {
     // Check if we're rate limited
     if (isRateLimited) {
-      const timeSinceLastFetch = Date.now() - lastFetchTime;
-      if (timeSinceLastFetch < 60000) { // 1 minute cooldown
-        const remainingTime = Math.ceil((60000 - timeSinceLastFetch) / 1000);
-        setError(`Rate limited. Please wait ${remainingTime} seconds before refreshing.`);
-        return;
+      // Only check rate limiting cooldown if we've actually made a previous request
+      if (lastFetchTime > 0) {
+        const timeSinceLastFetch = Date.now() - lastFetchTime;
+        if (timeSinceLastFetch < 60000) { // 1 minute cooldown
+          return;
+        } else {
+          setIsRateLimited(false);
+        }
       } else {
         setIsRateLimited(false);
       }
     }
 
     // Prevent too frequent requests (minimum 30 seconds between requests)
-    const timeSinceLastFetch = Date.now() - lastFetchTime;
-    if (timeSinceLastFetch < 30000) {
-      const remainingTime = Math.ceil((30000 - timeSinceLastFetch) / 1000);
-      setError(`Please wait at least 30 seconds between refreshes. ${remainingTime} seconds remaining.`);
-      return;
+    // Only apply rate limiting if we've actually made a previous request
+    if (lastFetchTime > 0) {
+      const timeSinceLastFetch = Date.now() - lastFetchTime;
+      if (timeSinceLastFetch < 30000) {
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -148,13 +152,38 @@ export default function PortfolioTable({
     } finally {
       setIsLoading(false);
     }
-  }, [setIsLoading, setError, credentials, portfolio, onPortfolioUpdate, isRateLimited, lastFetchTime]);
+  }, [setIsLoading, setError, credentials, portfolio, onPortfolioUpdate, isRateLimited, lastFetchTime, onWalletBalancesUpdate]);
 
   useEffect(() => {
     if (credentials) {
       fetchBalances();
     }
   }, [credentials, fetchBalances]);
+
+  // Auto-refresh every 30 seconds when credentials are present
+  useEffect(() => {
+    if (!credentials) return;
+
+    // Set up auto-refresh interval every 30 seconds
+    const interval = setInterval(() => {
+      // Don't auto-refresh if we're rate limited
+      if (isRateLimited) {
+        return;
+      }
+      
+      // Don't auto-refresh if there's still an error preventing refresh
+      const timeSinceLastFetch = Date.now() - lastFetchTime;
+      if (lastFetchTime > 0 && timeSinceLastFetch < 30000) {
+        return; // Still within 30-second cooldown, skip refresh
+      }
+
+      // Trigger refresh
+      fetchBalances();
+    }, 30000); // 30 seconds
+
+    // Cleanup the interval when component unmounts or credentials change
+    return () => clearInterval(interval);
+  }, [credentials, isRateLimited, lastFetchTime, fetchBalances]);
 
 
 

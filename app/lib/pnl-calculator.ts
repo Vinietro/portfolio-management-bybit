@@ -41,6 +41,9 @@ async function makeSignedRequest(endpoint: string, apiKey: string, secretKey: st
   return response.json();
 }
 
+// List of known invalid/dust tokens to skip for PNL calculation
+const INVALID_ASSETS = ['LDUSDT', 'LDUSDC', 'LDUSD', 'AGI', 'REWARD', 'DIGITAL', 'SHIB', 'BABYDOGE']; // Add more as needed
+
 export async function calculatePnlData(apiKey: string, secretKey: string, assets: string[]): Promise<Record<string, { pnl: number; pnlPercentage: number }>> {
   const pnlData: Record<string, { pnl: number; pnlPercentage: number }> = {};
 
@@ -63,10 +66,28 @@ export async function calculatePnlData(apiKey: string, secretKey: string, assets
         // Skip USDT/USD as they don't have PNL
         continue;
       }
+      
+      // Skip known invalid/dust tokens
+      if (INVALID_ASSETS.includes(asset.toUpperCase())) {
+        console.log(`Skipping ${asset}: Known invalid/dust token`);
+        continue;
+      }
+      
+      // Check if this is a valid symbol by seeing if it has a trading pair
+      const symbol = `${asset}USDT`;
+      if (!tickerPrices[symbol]) {
+        console.log(`Skipping ${asset}: ${symbol} not a valid trading pair`);
+        continue;
+      }
+      
+      // Additional validation - check if asset seems like dust/reward coin
+      if (asset.startsWith('LD') || asset.startsWith('DIGITAL') || asset.length > 10) {
+        console.log(`Skipping ${asset}: Pattern indicates reward/dust token`);
+        continue;
+      }
 
       try {
-        // Get trading history for this asset
-        const symbol = `${asset}USDT`;
+        // Get trading history for this asset  
         const trades: Trade[] = await makeSignedRequest('/api/v3/myTrades', apiKey, secretKey, {
           symbol: symbol,
           limit: '1000' // Get last 1000 trades
@@ -117,7 +138,14 @@ export async function calculatePnlData(apiKey: string, secretKey: string, assets
         };
 
       } catch (error) {
-        console.log(`Error fetching PNL for ${asset}:`, error);
+        // Handle specific error types gracefully
+        if (error instanceof Error && error.message.includes('-1121')) {
+          console.log(`Skipping ${asset}: Symbol ${asset}USDT not found or invalid (likely dust/reward token)`);
+        } else if (error instanceof Error && error.message.includes('Invalid symbol')) {
+          console.log(`Skipping ${asset}: Symbol ${asset}USDT is not a valid trading pair`);
+        } else {
+          console.log(`Error fetching PNL for ${asset}:`, error);
+        }
         // Continue with other assets even if one fails
       }
     }
