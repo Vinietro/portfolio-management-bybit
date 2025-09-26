@@ -36,6 +36,7 @@ export default function PortfolioTable({
   portfolio,
   onPortfolioUpdate,
   onCredentialsUpdate,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   isLoading,
   setIsLoading,
   setError,
@@ -43,6 +44,17 @@ export default function PortfolioTable({
 }: PortfolioTableProps) {
   const [totalBalance, setTotalBalance] = useState<number>(0);
   const [availableForAllocation, setAvailableForAllocation] = useState<number>(0);
+  const [pnlData, setPnlData] = useState<{
+    totalPNL: number;
+    totalPNLPercentage: number;
+    breakdown: Array<{
+      symbol: string;
+      entryValue: number;
+      exitValue: number;
+      realizedPNL: number;
+      pnlPercentage: number;
+    }>;
+  } | null>(null);
   const [walletBalances, setWalletBalances] = useState<Record<string, Array<{
     asset: string;
     free: string;
@@ -120,10 +132,6 @@ export default function PortfolioTable({
       const totalBalanceFromApi = data.totalBalance;
       const usdtEarnPercent = credentials?.usdtEarnTarget || 0;
       
-      // Calculate based on your requirement:
-      // USDT Earn Target = Total Balance * USDT Earn percent
-      const usdtEarnTarget = (totalBalanceFromApi * usdtEarnPercent) / 100;
-      
       // Available for Allocation = Total Balance * (100 - USDT Earn percent)
       const availableBalanceForCalculation = totalBalanceFromApi * (100 - usdtEarnPercent) / 100;
       setAvailableForAllocation(availableBalanceForCalculation);
@@ -134,17 +142,27 @@ export default function PortfolioTable({
         console.log('Total Balance:', totalBalanceFromApi, 'USDT Earn %:', usdtEarnPercent, 'Available:', availableBalanceForCalculation);
         
         const updatedPortfolio = portfolio.map(item => {
-          const currentAmount = data.balances[item.coin] || 0;
+          // Normalize coin name: ENAUSDT -> ENA
+          const coinAssetName = item.coin.includes('USDT') ? item.coin.substring(0, item.coin.indexOf('USDT')) : item.coin;
+          const currentAmount = data.balances[coinAssetName] || 0;
           // TARGET AMOUNT: Available for Allocation * Coin Percent
           const targetAmount = (availableBalanceForCalculation * item.targetPercent) / 100;
           // CURRENT PERCENT: Relative to available for allocation
           const currentPercent = availableBalanceForCalculation > 0 ? (currentAmount / availableBalanceForCalculation) * 100 : 0;
           const difference = targetAmount - currentAmount;
 
-          // Get PNL data for this coin from spot wallet
-          const spotBalance = data.walletBalances?.spot?.find((b: { asset: string; pnl?: number; pnlPercentage?: number }) => b.asset === item.coin);
-          const pnl = spotBalance?.pnl;
-          const pnlPercentage = spotBalance?.pnlPercentage;
+          // Get PNL from trading transactions (database history) 
+          let pnl = 0;
+          let pnlPercentage = 0;
+          if (pnlData) {
+            const pnlItem = pnlData.breakdown.find((pnlDataItem: { symbol: string; realizedPNL: number; pnlPercentage: number }) => 
+              pnlDataItem.symbol === coinAssetName
+            );
+            if (pnlItem) {
+              pnl = pnlItem.realizedPNL;
+              pnlPercentage = pnlItem.pnlPercentage;
+            }
+          }
 
           return {
             ...item,
@@ -172,7 +190,28 @@ export default function PortfolioTable({
     } finally {
       setIsLoading(false);
     }
-  }, [setIsLoading, setError, credentials, portfolio, onPortfolioUpdate, isRateLimited, lastFetchTime, onWalletBalancesUpdate]);
+  }, [setIsLoading, setError, credentials, portfolio, onPortfolioUpdate, isRateLimited, lastFetchTime, onWalletBalancesUpdate, pnlData]);
+
+  const fetchPnlData = useCallback(async () => {
+    if (!credentials?.apiKey) return;
+    
+    try {
+      const response = await fetch('/api/pnl-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: credentials.apiKey })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setPnlData(data.pnlData);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch P&L data:', error);
+    }
+  }, [credentials]);
 
   useEffect(() => {
     if (credentials && portfolio && portfolio.length > 0) {
@@ -180,6 +219,21 @@ export default function PortfolioTable({
       fetchBalances();
     }
   }, [credentials, portfolio, fetchBalances]);
+
+  useEffect(() => {
+    if (credentials?.apiKey) {
+      fetchPnlData();
+    }
+  }, [credentials, fetchPnlData]);
+
+  // Add PNL when data is loaded (avoid circular deps)
+  useEffect(() => {
+    if (pnlData) {
+      fetchBalances(); 
+      // Simply re-run balance fetch which will include the new PNL inside its logic  
+    }
+  }, [pnlData, fetchBalances]);
+
 
   // Auto-refresh every 30 seconds when credentials are present
   useEffect(() => {
@@ -248,50 +302,82 @@ export default function PortfolioTable({
 
   return (
     <div className="space-y-6">
-      {/* Portfolio Overview and Earn Wallet Side by Side */}
+      {/* Portfolio Overview Card */}
+      <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+        <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Portfolio Overview</h3>
+        <div className="flex flex-wrap justify-between gap-4">
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            Total Balance: <span className="font-semibold text-green-600">{formatCurrency(totalBalance)}</span>
+          </div>
+          <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
+            <span>USDT Earn desired allocation:</span>
+            <input
+              type="number"
+              value={credentials.usdtEarnTarget || ''}
+              onChange={(e) => {
+                const value = parseFloat(e.target.value) || 0;
+                if (value >= 0 && value <= 100) {
+                  const updatedCredentials = { ...credentials, usdtEarnTarget: value };
+                  localStorage.setItem('binanceCredentials', JSON.stringify(updatedCredentials));
+                  onCredentialsUpdate(updatedCredentials);
+                }
+              }}
+              className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="0"
+              step="0.1"
+              min="0"
+              max="100"
+            />
+            <span className="text-gray-500">%</span>
+          </div>
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            Spot trading capital: <span className="font-semibold text-blue-600">{formatCurrency(availableForAllocation)} ({getRemainingAllocation().toFixed(1)}%)</span>
+          </div>
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            Spot trading capital allocation: <span className="font-semibold">{getTotalTargetPercent().toFixed(1)}%</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Portfolio and Earn Wallet Side by Side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left side - Portfolio Controls */}
+        {/* Left side - P&L Section */}
         <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-          <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Portfolio Overview</h3>
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Trading Performance</h3>
           <div className="space-y-3">
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              Total Balance: <span className="font-semibold text-green-600">{formatCurrency(totalBalance)}</span>
-            </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              Available for Allocation: <span className="font-semibold text-blue-600">{formatCurrency(availableForAllocation)}</span>
-            </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              Regular Allocation: <span className="font-semibold">{getTotalTargetPercent().toFixed(1)}%</span>
-            </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
-              <span>USDT Earn:</span>
-              <input
-                type="number"
-                value={credentials.usdtEarnTarget || ''}
-                onChange={(e) => {
-                  const value = parseFloat(e.target.value) || 0;
-                  if (value >= 0 && value <= 100) {
-                    const updatedCredentials = { ...credentials, usdtEarnTarget: value };
-                    localStorage.setItem('binanceCredentials', JSON.stringify(updatedCredentials));
-                    onCredentialsUpdate(updatedCredentials);
-                  }
-                }}
-                className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="0"
-                step="0.1"
-                min="0"
-                max="100"
-              />
-              <span className="text-gray-500">%</span>
-            </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              Remaining: <span className="font-semibold text-purple-600">{getRemainingAllocation().toFixed(1)}%</span>
-            </div>
-            {credentials.usdtEarnTarget && (
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                USDT Needed: <span className={`font-semibold ${getUsdtEarnNeeded() > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {formatCurrency(getUsdtEarnNeeded())}
-                </span>
+            {/* P&L Section */}
+            {pnlData && (
+              <>
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  Total P&L: <span className={`font-semibold ${pnlData.totalPNL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatCurrency(pnlData.totalPNL)}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  Percentage: <span className={`font-semibold ${pnlData.totalPNLPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {pnlData.totalPNLPercentage >= 0 ? '+' : ''}{pnlData.totalPNLPercentage.toFixed(2)}%
+                  </span>
+                </div>
+                
+                {/* Breakdown of individual coins */}
+                {pnlData.breakdown && pnlData.breakdown.length > 0 && (
+                  <div className="mt-2 max-h-24 overflow-y-auto">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Breakdown:</div>
+                    {pnlData.breakdown.map((item, index) => (
+                      <div key={index} className="text-xs text-gray-600 dark:text-gray-400 flex justify-between">
+                        <span>{item.symbol}:</span>
+                        <span className={`${item.realizedPNL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(item.realizedPNL)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            {!pnlData && (
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                No trading history available
               </div>
             )}
           </div>
@@ -419,114 +505,6 @@ export default function PortfolioTable({
               </div>
             )}
             
-            {/* Staking Actions - embedded in Earn Wallet */}
-            <div className="border-t border-gray-200 dark:border-gray-600 pt-3 mt-3">
-              <div className="flex gap-2">
-                {/* Stake USDT button */}
-                <button
-                  onClick={async () => {
-                    const amountStr = prompt('Enter USDT amount to stake:');
-                    if (amountStr === null) return;
-                    
-                    const amount = parseFloat(amountStr);
-                    if (isNaN(amount) || amount <= 0) {
-                      alert('Please enter a valid amount');
-                      return;
-                    }
-
-                    setIsLoading(true);
-                    setError(null);
-
-                    try {
-                      const response = await fetch('/api/staking', {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                          apiKey: credentials.apiKey,
-                          secretKey: credentials.secretKey,
-                          action: 'stake',
-                          amount: amount
-                        }),
-                      });
-
-                      const data = await response.json();
-
-                      if (data.success) {
-                        alert(`Successfully staked ${amount} USDT to Earn!\n\nNote: It may take a few minutes to appear in your Earn wallet.`);
-                        // Trigger refresh to update balances
-                        setTimeout(() => {
-                          fetchBalances();
-                        }, 2000);
-                      } else {
-                        setError(data.error || 'Failed to stake USDT');
-                      }
-                    } catch (error) {
-                      setError('Failed to stake USDT - ' + (error as Error).message);
-                    } finally {
-                      setIsLoading(false);
-                    }
-                  }}
-                  disabled={isLoading}
-                  className="flex-1 bg-green-600 text-white py-2 px-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
-                >
-                  {isLoading ? 'Staking...' : 'Stake'}
-                </button>
-
-                {/* Unstake USDT button */}
-                <button
-                  onClick={async () => {
-                    const amountStr = prompt('Enter USDT amount to unstake:');
-                    if (amountStr === null) return;
-                    
-                    const amount = parseFloat(amountStr);
-                    if (isNaN(amount) || amount <= 0) {
-                      alert('Please enter a valid amount');
-                      return;
-                    }
-
-                    setIsLoading(true);
-                    setError(null);
-
-                    try {
-                      const response = await fetch('/api/staking', {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                          apiKey: credentials.apiKey,
-                          secretKey: credentials.secretKey,
-                          action: 'unstake',
-                          amount: amount
-                        }),
-                      });
-
-                      const data = await response.json();
-
-                      if (data.success) {
-                        alert(`Successfully initiated unstaking of ${amount} USDT!\n\nNote: It may take up to 1 day for funds to appear in your spot wallet.`);
-                        // Trigger refresh to update balances
-                        setTimeout(() => {
-                          fetchBalances();
-                        }, 2000);
-                      } else {
-                        setError(data.error || 'Failed to unstake USDT');
-                      }
-                    } catch (error) {
-                      setError('Failed to unstake USDT - ' + (error as Error).message);
-                    } finally {
-                      setIsLoading(false);
-                    }
-                  }}
-                  disabled={isLoading}
-                  className="flex-1 bg-red-600 text-white py-2 px-3 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
-                >
-                  {isLoading ? 'Unstaking...' : 'Unstake'}
-                </button>
-              </div>
-            </div>
           </div>
         </div>
 

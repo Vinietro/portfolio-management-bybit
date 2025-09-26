@@ -58,6 +58,9 @@ CREATE INDEX IF NOT EXISTS idx_sync_log_user_id ON sync_log(user_id);
 CREATE INDEX IF NOT EXISTS idx_sync_log_timestamp ON sync_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_default_coins_active ON default_coins(is_active);
 CREATE INDEX IF NOT EXISTS idx_default_coins_order ON default_coins(display_order);
+CREATE INDEX IF NOT EXISTS idx_trading_transactions_api_key ON trading_transactions(api_key_hash);
+CREATE INDEX IF NOT EXISTS idx_trading_transactions_symbol ON trading_transactions(symbol);
+CREATE INDEX IF NOT EXISTS idx_trading_transactions_created_at ON trading_transactions(created_at);
 
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -80,6 +83,19 @@ CREATE TRIGGER update_credentials_updated_at BEFORE UPDATE ON credentials
 
 CREATE TRIGGER update_default_coins_updated_at BEFORE UPDATE ON default_coins
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Create trading transactions table for tracking entries/exits
+CREATE TABLE IF NOT EXISTS trading_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  api_key_hash TEXT NOT NULL, -- Hashed API key for identification
+  symbol TEXT NOT NULL,       -- Trading symbol (e.g., BTC, ETH)
+  side TEXT NOT NULL,         -- BUY or SELL
+  quantity NUMERIC(20,8) NOT NULL,
+  price NUMERIC(20,8) NOT NULL,
+  total_value NUMERIC(20,8) NOT NULL,
+  transaction_type TEXT NOT NULL CHECK (transaction_type IN ('entry', 'exit')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
 -- Insert default coins data
 INSERT INTO default_coins (coin_symbol, target_percentage, display_order) VALUES 

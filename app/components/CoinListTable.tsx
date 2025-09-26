@@ -1,6 +1,6 @@
 'use client';
 
-import { DollarSign, TrendingUp, TrendingDown, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
 import { PortfolioItem, BinanceCredentials } from '../types';
 
 interface CoinListTableProps {
@@ -262,10 +262,10 @@ export default function CoinListTable({
                     <button
                       onClick={() => handleBuyToTarget(item)}
                       disabled={!item.coin || !item.difference || item.difference <= 0}
-                      className="text-green-500 hover:text-green-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                      className="px-3 py-1 text-xs font-medium text-green-700 bg-green-100 dark:bg-green-900/20 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/30 disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed cursor-pointer transition-colors rounded-md"
                       title="Buy remaining amount to reach target"
                     >
-                      <ArrowUpCircle className="h-4 w-4" />
+                      BUY TARGET
                     </button>
                     <button
                       onClick={() => handleSellAll(item)}
@@ -275,10 +275,10 @@ export default function CoinListTable({
                         const actualCoinQuantity = spotBalance ? parseFloat(spotBalance.free) + parseFloat(spotBalance.locked) : 0;
                         return actualCoinQuantity <= 0;
                       })()}
-                      className="text-red-500 hover:text-red-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                      className="px-3 py-1 text-xs font-medium text-red-700 bg-red-100 dark:bg-red-900/20 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/30 disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed cursor-pointer transition-colors rounded-md"
                       title="Sell entire position"
                     >
-                      <ArrowDownCircle className="h-4 w-4" />
+                      CLOSE POSITION
                     </button>
                   </div>
                 </td>

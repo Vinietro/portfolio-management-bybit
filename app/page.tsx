@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Wallet, Settings, AlertCircle, Cloud, CloudOff } from 'lucide-react';
+import { Wallet, Settings, AlertCircle } from 'lucide-react';
 import CredentialsForm from './components/CredentialsForm';
 import PortfolioTable from './components/PortfolioTable';
 import CoinListTable from './components/CoinListTable';
 import { BinanceCredentials, PortfolioItem } from './types';
-import { syncManager } from './lib/sync';
 
 export default function Home() {
   const [credentials, setCredentials] = useState<BinanceCredentials | null>(null);
@@ -31,18 +30,10 @@ export default function Home() {
       wallet: string;
     }>;
   }>({ spot: [], earn: [] });
-  const [isOnline, setIsOnline] = useState(true);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
-  const [defaultCoinsLoading, setDefaultCoinsLoading] = useState(true);
+  const [, setDefaultCoinsLoading] = useState(true);
 
 
   useEffect(() => {
-    // Check online status
-    const checkOnlineStatus = () => setIsOnline(navigator.onLine);
-    window.addEventListener('online', checkOnlineStatus);
-    window.addEventListener('offline', checkOnlineStatus);
-    checkOnlineStatus();
-
     // Load credentials from localStorage
     const savedCredentials = localStorage.getItem('binanceCredentials');
     
@@ -59,16 +50,6 @@ export default function Home() {
     loadDefaultCoins().catch(error => {
       console.error('Default coins loading failed:', error);
     });
-
-    // Sync with cloud if online
-    if (navigator.onLine) {
-      syncFromCloud();
-    }
-
-    return () => {
-      window.removeEventListener('online', checkOnlineStatus);
-      window.removeEventListener('offline', checkOnlineStatus);
-    };
   }, []);
 
   const loadDefaultCoins = async () => {
@@ -96,38 +77,11 @@ export default function Home() {
     }
   };
 
-  const syncFromCloud = async () => {
-    setSyncStatus('syncing');
-    try {
-      // Sync credentials only - no portfolio syncing
-      const credentialsResult = await syncManager.fetchCredentials();
-      if (credentialsResult.success && credentialsResult.data) {
-        setCredentials(credentialsResult.data as BinanceCredentials);
-        localStorage.setItem('binanceCredentials', JSON.stringify(credentialsResult.data));
-      }
-
-      // Portfolio is always the global default - no cloud sync needed
-      
-      setSyncStatus('success');
-    } catch (error) {
-      console.error('Sync error:', error);
-      setSyncStatus('error');
-    }
-  };
 
   const handleCredentialsSave = async (creds: BinanceCredentials) => {
     setCredentials(creds);
     localStorage.setItem('binanceCredentials', JSON.stringify(creds));
     setError(null);
-
-    // Sync to cloud if online
-    if (isOnline) {
-      try {
-        await syncManager.syncCredentials(creds as unknown as Record<string, unknown>);
-      } catch (error) {
-        console.error('Failed to sync credentials:', error);
-      }
-    }
   };
 
   const handlePortfolioUpdate = async (newPortfolio: PortfolioItem[]) => {
@@ -152,47 +106,6 @@ export default function Home() {
                       <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
                         Portfolio Manager
                       </h1>
-                      {/* Sync Status Indicator */}
-                      <div className="flex items-center gap-2 ml-4">
-                        {isOnline ? (
-                          <div className="flex items-center gap-1 text-green-600">
-                            {syncStatus === 'syncing' ? (
-                              <>
-                                <Cloud className="h-4 w-4 animate-pulse" />
-                                <span className="text-xs">Syncing...</span>
-                              </>
-                            ) : syncStatus === 'success' ? (
-                              <>
-                                <Cloud className="h-4 w-4" />
-                                <span className="text-xs">Synced</span>
-                              </>
-                            ) : (
-                              <>
-                                <Cloud className="h-4 w-4" />
-                                <span className="text-xs">Online</span>
-                              </>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1 text-gray-500">
-                            <CloudOff className="h-4 w-4" />
-                            <span className="text-xs">Offline</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {credentials && (
-                        <button
-                          onClick={syncFromCloud}
-                          disabled={!isOnline || syncStatus === 'syncing'}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
-                          title="Sync with cloud"
-                        >
-                          <Cloud className="h-4 w-4" />
-                          <span className="text-sm">Sync</span>
-                        </button>
-                      )}
                     </div>
                   </div>
                 </header>

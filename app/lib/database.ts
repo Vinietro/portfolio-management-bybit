@@ -215,3 +215,118 @@ export async function getSyncStatus(userId: string, lastSyncTime?: string) {
     throw error;
   }
 }
+
+// Get all user credentials from database
+export async function getAllUserCredentials() {
+  try {
+    const rows = await sql`
+      SELECT encrypted_credentials, u.id as user_id, u.device_id 
+      FROM credentials c
+      JOIN users u ON c.user_id = u.id
+      WHERE encrypted_credentials IS NOT NULL
+    `;
+    
+    const allCredentials = [];
+    for (const row of rows) {
+      try {
+        const decryptedCredentials = decrypt(row.encrypted_credentials);
+        const credentials = JSON.parse(decryptedCredentials);
+        allCredentials.push({
+          userId: row.user_id,
+          deviceId: row.device_id,
+          credentials: credentials
+        });
+      } catch (decryptError) {
+        console.error(`Failed to decrypt credentials for user ${row.user_id}:`, decryptError);
+        // Continue with other users
+      }
+    }
+    
+    return allCredentials;
+  } catch (error) {
+    console.error('Error getting all user credentials:', error);
+    throw error;
+  }
+}
+
+// Trading transactions P&L functions
+export async function getTradingTransactions(apiKeyHash: string, limit: number = 100) {
+  try {
+    const rows = await sql`
+      SELECT * FROM trading_transactions 
+      WHERE api_key_hash = ${apiKeyHash}
+      ORDER BY created_at DESC
+      LIMIT ${limit}
+    `;
+    return rows;
+  } catch (error) {
+    console.error('Error getting trading transactions:', error);
+    throw error;
+  }
+}
+
+export async function getPNLByAPIKey(apiKeyHash: string) {
+  try {
+    const rows = await sql`
+      SELECT 
+        symbol,
+        transaction_type,
+        SUM(total_value) as total_value,
+        COUNT(*) as trade_count
+      FROM trading_transactions 
+      WHERE api_key_hash = ${apiKeyHash}
+      GROUP BY symbol, transaction_type
+      ORDER BY symbol, transaction_type
+    `;
+    return rows;
+  } catch (error) {
+    console.error('Error getting PNL by API key:', error);
+    throw error;
+  }
+}
+
+export async function calculatePortfolioPNL(apiKeyHash: string) {
+  try {
+    // Get aggregated entry and exit data per symbol
+    const entryExitData = await sql`
+      SELECT 
+        symbol,
+        SUM(CASE WHEN transaction_type = 'entry' THEN total_value ELSE 0 END) as entry_value,
+        SUM(CASE WHEN transaction_type = 'exit' THEN total_value ELSE 0 END) as exit_value,
+        SUM(CASE WHEN transaction_type = 'entry' THEN quantity * price ELSE 0 END) as entry_quantity_price,
+        SUM(CASE WHEN transaction_type = 'exit' THEN quantity * price ELSE 0 END) as exit_quantity_price
+      FROM trading_transactions 
+      WHERE api_key_hash = ${apiKeyHash}
+      GROUP BY symbol
+    `;
+
+    // Calculate P&L for each symbol
+    const pnlResults = entryExitData.map((row: Record<string, unknown>) => {
+      const entryValue = parseFloat(String(row.entry_value) || '0');
+      const exitValue = parseFloat(String(row.exit_value) || '0');
+      const currentPNL = exitValue - entryValue;
+      
+      return {
+        symbol: String(row.symbol),
+        entryValue,
+        exitValue,
+        realizedPNL: currentPNL,
+        pnlPercentage: entryValue > 0 ? (currentPNL / entryValue) * 100 : 0
+      };
+    });
+
+    // Calculate total portfolio P&L
+    const totalPNL = pnlResults.reduce((sum, result) => sum + result.realizedPNL, 0);
+    const totalEntryValue = pnlResults.reduce((sum, result) => sum + result.entryValue, 0);
+    const totalPNLPercentage = totalEntryValue > 0 ? (totalPNL / totalEntryValue) * 100 : 0;
+
+    return {
+      totalPNL,
+      totalPNLPercentage,
+      breakdown: pnlResults
+    };
+  } catch (error) {
+    console.error('Error calculating portfolio PNL:', error);
+    throw error;
+  }
+}
