@@ -1,21 +1,19 @@
-# Binance API Setup for Futures and Earn Balances
+# Binance API Setup for Spot and Earn Balances
 
-This application now supports fetching balances from all three Binance wallets:
+This application supports fetching balances from two Binance wallets:
 - **Spot Wallet** - Regular trading balances
-- **Futures Wallet** - Futures trading balances  
 - **Earn Wallet** - Simple Earn positions
 
 ## Required API Permissions
 
-To access futures and earn balances, your Binance API key needs specific permissions:
+To access spot and earn balances, your Binance API key needs specific permissions:
 
-### 1. Futures Trading Permissions
+### 1. Spot Trading Permissions
 1. Go to [Binance.com](https://www.binance.com) → API Management
 2. Select your API key or create a new one
 3. Enable the following permissions:
-   - ✅ **Enable Futures**
-   - ✅ **Enable Reading** (for balance information)
    - ✅ **Enable Spot & Margin Trading** (for spot balances)
+   - ✅ **Enable Reading** (for balance information)
 
 ### 2. Simple Earn Permissions
 1. In the same API Management page
@@ -34,9 +32,6 @@ The application uses the following Binance API endpoints:
 
 ### Spot Balances
 - `GET /api/v3/account` - Account information and spot balances
-
-### Futures Balances  
-- `GET /fapi/v2/account` - Futures account information and balances
 
 ### Earn Balances
 - `GET /sapi/v1/simple-earn/flexible/position` - Simple Earn flexible positions
@@ -73,8 +68,8 @@ The application includes comprehensive error handling for common issues:
 
 1. Enter your API credentials in the application
 2. Click "Test Credentials" to verify basic connectivity
-3. Check the wallet breakdown to see balances from all three wallets
-4. If futures or earn balances don't appear, check the console for specific error messages
+3. Check the wallet breakdown to see balances from both wallets
+4. If earn balances don't appear, check the console for specific error messages
 
 ## Support
 

@@ -79,7 +79,7 @@ export default function CoinListTable({
               <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">Current Amount</th>
               <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">Current %</th>
               <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">Difference</th>
-              <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">PNL</th>
+              <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">Open PNL</th>
               <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">Actions</th>
             </tr>
           </thead>

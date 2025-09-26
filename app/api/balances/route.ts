@@ -24,15 +24,6 @@ interface BinanceEarnBalance {
   totalRewards: string;
 }
 
-interface BinanceFuturesBalance {
-  accountAlias: string;
-  asset: string;
-  balance: string;
-  crossWalletBalance: string;
-  crossUnPnl: string;
-  availableBalance: string;
-  maxWithdrawAmount: string;
-}
 
 interface WalletBalance {
   asset: string;
@@ -125,8 +116,7 @@ export async function POST(request: NextRequest) {
     const balances: Record<string, number> = {};
     const walletBalances: Record<string, WalletBalance[]> = {
       spot: [],
-      earn: [],
-      futures: []
+      earn: []
     };
 
     // Get Spot wallet balances
@@ -200,33 +190,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Get Futures wallet balances
-    const futuresBalances: BinanceFuturesBalance[] = [];
-    try {
-      // Get futures account information using direct API call
-      const futuresAccount = await makeSignedRequest('/fapi/v2/account', apiKey, secretKey);
-      
-      if (futuresAccount && futuresAccount.assets) {
-        for (const asset of futuresAccount.assets) {
-          const availableBalance = parseFloat(asset.availableBalance);
-          const walletBalance = parseFloat(asset.walletBalance);
-          
-          if (availableBalance > 0 || walletBalance > 0) {
-            futuresBalances.push({
-              accountAlias: futuresAccount.accountAlias || '',
-              asset: asset.asset,
-              balance: asset.walletBalance,
-              crossWalletBalance: asset.walletBalance,
-              crossUnPnl: asset.unrealizedPnl || '0',
-              availableBalance: asset.availableBalance,
-              maxWithdrawAmount: asset.maxWithdrawAmount || '0'
-            });
-          }
-        }
-      }
-    } catch (futuresError) {
-      console.log('Futures wallet not accessible or no positions:', futuresError);
-    }
 
     // Process all balances and calculate USD values
     const allBalances = [
@@ -236,12 +199,6 @@ export async function POST(request: NextRequest) {
         free: b.totalAmount, 
         locked: '0',
         wallet: 'earn'
-      })),
-      ...futuresBalances.map(b => ({ 
-        asset: b.asset, 
-        free: b.availableBalance, 
-        locked: '0',
-        wallet: 'futures'
       }))
     ];
 
@@ -295,14 +252,6 @@ export async function POST(request: NextRequest) {
             usdValue,
             wallet: 'earn'
           });
-        } else if (balance.wallet === 'futures') {
-          walletBalances.futures.push({
-            asset: balance.asset,
-            free: balance.free,
-            locked: '0',
-            usdValue,
-            wallet: 'futures'
-          });
         }
       }
     }
@@ -326,15 +275,6 @@ export async function POST(request: NextRequest) {
         totalRealTimeRewards: balance.totalRealTimeRewards,
         totalRewards: balance.totalRewards
       })),
-      futuresBalances: futuresBalances.map((balance: BinanceFuturesBalance) => ({
-        accountAlias: balance.accountAlias,
-        asset: balance.asset,
-        balance: balance.balance,
-        crossWalletBalance: balance.crossWalletBalance,
-        crossUnPnl: balance.crossUnPnl,
-        availableBalance: balance.availableBalance,
-        maxWithdrawAmount: balance.maxWithdrawAmount
-      }))
     });
 
   } catch (error: unknown) {

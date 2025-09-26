@@ -5,7 +5,6 @@ import { Wallet, Settings, RefreshCw, AlertCircle } from 'lucide-react';
 import CredentialsForm from './components/CredentialsForm';
 import PortfolioTable from './components/PortfolioTable';
 import CoinListTable from './components/CoinListTable';
-import FuturesPositionsTable from './components/FuturesPositionsTable';
 import { BinanceCredentials, PortfolioItem } from './types';
 
 export default function Home() {
@@ -25,7 +24,6 @@ export default function Home() {
       setCredentials({
         apiKey: parsedCredentials.apiKey,
         secretKey: parsedCredentials.secretKey,
-        futuresWalletTarget: parsedCredentials.futuresWalletTarget,
         usdtEarnTarget: parsedCredentials.usdtEarnTarget || parsedCredentials.usdcEarnTarget // Backward compatibility
       });
     }
@@ -137,17 +135,11 @@ export default function Home() {
               />
             </div>
             
-            {/* Coin List and Futures Positions Side by Side */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Coin List */}
+            <div className="grid grid-cols-1 gap-6">
               <CoinListTable
                 portfolio={portfolio}
                 onPortfolioUpdate={handlePortfolioUpdate}
-              />
-              
-              <FuturesPositionsTable
-                credentials={credentials}
-                setIsLoading={setIsLoading}
-                setError={setError}
               />
             </div>
           </div>
