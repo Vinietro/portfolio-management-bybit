@@ -42,6 +42,7 @@ export default function PortfolioTable({
   onWalletBalancesUpdate
 }: PortfolioTableProps) {
   const [totalBalance, setTotalBalance] = useState<number>(0);
+  const [availableForAllocation, setAvailableForAllocation] = useState<number>(0);
   const [walletBalances, setWalletBalances] = useState<Record<string, Array<{
     asset: string;
     free: string;
@@ -115,35 +116,52 @@ export default function PortfolioTable({
         onWalletBalancesUpdate(newWalletBalances);
       }
       
-      // Update portfolio with current amounts
-      const currentUsdtInEarn = data.walletBalances?.earn
-        ?.filter((balance: { asset: string; usdValue: number }) => balance.asset === 'USDT')
-        ?.reduce((sum: number, balance: { asset: string; usdValue: number }) => sum + balance.usdValue, 0) || 0;
-      const availableBalance = data.totalBalance - currentUsdtInEarn;
+      // Calculate allocation logic
+      const totalBalanceFromApi = data.totalBalance;
+      const usdtEarnPercent = credentials?.usdtEarnTarget || 0;
       
-      const updatedPortfolio = portfolio.map(item => {
-        const currentAmount = data.balances[item.coin] || 0;
-        const targetAmount = (availableBalance * item.targetPercent) / 100;
-        const currentPercent = availableBalance > 0 ? (currentAmount / availableBalance) * 100 : 0;
-        const difference = targetAmount - currentAmount;
+      // Calculate based on your requirement:
+      // USDT Earn Target = Total Balance * USDT Earn percent
+      const usdtEarnTarget = (totalBalanceFromApi * usdtEarnPercent) / 100;
+      
+      // Available for Allocation = Total Balance * (100 - USDT Earn percent)
+      const availableBalanceForCalculation = totalBalanceFromApi * (100 - usdtEarnPercent) / 100;
+      setAvailableForAllocation(availableBalanceForCalculation);
+      
+      // Calculate portfolio data if valid coins exist
+      if (portfolio && portfolio.length > 0) {
+        console.log('📊 PortfolioTable: Processing portfolio with', portfolio.length, 'coins');
+        console.log('Total Balance:', totalBalanceFromApi, 'USDT Earn %:', usdtEarnPercent, 'Available:', availableBalanceForCalculation);
+        
+        const updatedPortfolio = portfolio.map(item => {
+          const currentAmount = data.balances[item.coin] || 0;
+          // TARGET AMOUNT: Available for Allocation * Coin Percent
+          const targetAmount = (availableBalanceForCalculation * item.targetPercent) / 100;
+          // CURRENT PERCENT: Relative to available for allocation
+          const currentPercent = availableBalanceForCalculation > 0 ? (currentAmount / availableBalanceForCalculation) * 100 : 0;
+          const difference = targetAmount - currentAmount;
 
-        // Get PNL data for this coin from spot wallet
-        const spotBalance = data.walletBalances?.spot?.find((b: { asset: string; pnl?: number; pnlPercentage?: number }) => b.asset === item.coin);
-        const pnl = spotBalance?.pnl;
-        const pnlPercentage = spotBalance?.pnlPercentage;
+          // Get PNL data for this coin from spot wallet
+          const spotBalance = data.walletBalances?.spot?.find((b: { asset: string; pnl?: number; pnlPercentage?: number }) => b.asset === item.coin);
+          const pnl = spotBalance?.pnl;
+          const pnlPercentage = spotBalance?.pnlPercentage;
 
-        return {
-          ...item,
-          currentAmount,
-          targetAmount,
-          currentPercent,
-          difference,
-          pnl,
-          pnlPercentage
-        };
-      });
+          return {
+            ...item,
+            currentAmount,
+            targetAmount,
+            currentPercent,
+            difference,
+            pnl,
+            pnlPercentage
+          };
+        });
 
-      onPortfolioUpdate(updatedPortfolio);
+        console.log('🔄 PortfolioTable: Updating with calculated balances', updatedPortfolio.length);
+        onPortfolioUpdate(updatedPortfolio);
+      } else {
+        console.log('🚫 PortfolioTable: Skipping balance calc - no portfolio coins available');
+      }
     } catch (error) {
       if (error instanceof Error && error.message.includes('rate limit')) {
         setIsRateLimited(true);
@@ -157,10 +175,11 @@ export default function PortfolioTable({
   }, [setIsLoading, setError, credentials, portfolio, onPortfolioUpdate, isRateLimited, lastFetchTime, onWalletBalancesUpdate]);
 
   useEffect(() => {
-    if (credentials) {
+    if (credentials && portfolio && portfolio.length > 0) {
+      console.log('🚀 PortfolioTable: Triggering balance fetch for', portfolio.length, 'coins');
       fetchBalances();
     }
-  }, [credentials, fetchBalances]);
+  }, [credentials, portfolio, fetchBalances]);
 
   // Auto-refresh every 30 seconds when credentials are present
   useEffect(() => {
@@ -239,7 +258,7 @@ export default function PortfolioTable({
               Total Balance: <span className="font-semibold text-green-600">{formatCurrency(totalBalance)}</span>
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">
-              Available for Allocation: <span className="font-semibold text-blue-600">{formatCurrency(totalBalance - getCurrentUsdtInEarn())}</span>
+              Available for Allocation: <span className="font-semibold text-blue-600">{formatCurrency(availableForAllocation)}</span>
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">
               Regular Allocation: <span className="font-semibold">{getTotalTargetPercent().toFixed(1)}%</span>

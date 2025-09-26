@@ -1,12 +1,11 @@
 'use client';
 
-import { Plus, Trash2, DollarSign, TrendingUp, TrendingDown, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 import { PortfolioItem, BinanceCredentials } from '../types';
 
 interface CoinListTableProps {
   credentials: BinanceCredentials;
   portfolio: PortfolioItem[];
-  onPortfolioUpdate: (portfolio: PortfolioItem[]) => void;
   setIsLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   walletBalances?: {
@@ -30,33 +29,10 @@ interface CoinListTableProps {
 export default function CoinListTable({
   credentials,
   portfolio,
-  onPortfolioUpdate,
   setIsLoading,
   setError,
   walletBalances
 }: CoinListTableProps) {
-  const addCoin = () => {
-    const newItem: PortfolioItem = {
-      id: Date.now().toString(),
-      coin: '',
-      targetPercent: 0
-    };
-    onPortfolioUpdate([...portfolio, newItem]);
-  };
-
-  const removeCoin = (id: string) => {
-    onPortfolioUpdate(portfolio.filter(item => item.id !== id));
-  };
-
-  const updateCoin = (id: string, field: keyof PortfolioItem, value: string | number) => {
-    const updatedPortfolio = portfolio.map(item => {
-      if (item.id === id) {
-        return { ...item, [field]: value };
-      }
-      return item;
-    });
-    onPortfolioUpdate(updatedPortfolio);
-  };
 
   const handleBuyToTarget = async (item: PortfolioItem) => {
     if (!item.coin || !item.difference || item.difference <= 0) {
@@ -190,20 +166,11 @@ export default function CoinListTable({
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <DollarSign className="h-6 w-6 text-green-600" />
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Portfolio Allocation
-          </h2>
-        </div>
-        <button
-          onClick={addCoin}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Add Coin
-        </button>
+      <div className="flex items-center gap-3 mb-6">
+        <DollarSign className="h-6 w-6 text-green-600" />
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+          Portfolio Allocation
+        </h2>
       </div>
 
       <div className="overflow-x-auto">
@@ -224,25 +191,14 @@ export default function CoinListTable({
             {portfolio.map((item) => (
               <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-slate-700">
                 <td className="py-3 px-4">
-                  <input
-                    type="text"
-                    value={item.coin}
-                    onChange={(e) => updateCoin(item.id, 'coin', e.target.value.toUpperCase())}
-                    className="w-full bg-transparent border-none focus:outline-none text-gray-900 dark:text-white"
-                    placeholder="BTC"
-                  />
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {item.coin}
+                  </span>
                 </td>
                 <td className="py-3 px-4">
-                  <input
-                    type="number"
-                    value={item.targetPercent}
-                    onChange={(e) => updateCoin(item.id, 'targetPercent', parseFloat(e.target.value) || 0)}
-                    className="w-20 bg-transparent border-none focus:outline-none text-gray-900 dark:text-white"
-                    step="0.1"
-                    min="0"
-                    max="100"
-                  />
-                  <span className="text-gray-500">%</span>
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {item.targetPercent.toFixed(2)}%
+                  </span>
                 </td>
                 <td className="py-3 px-4">
                   {item.targetAmount ? (
@@ -324,14 +280,6 @@ export default function CoinListTable({
                     >
                       <ArrowDownCircle className="h-4 w-4" />
                     </button>
-                    <button
-                      onClick={() => removeCoin(item.id)}
-                      disabled={false}
-                      className="text-red-500 hover:text-red-700 transition-colors"
-                      title="Remove coin from portfolio"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
                   </div>
                 </td>
               </tr>
@@ -343,7 +291,7 @@ export default function CoinListTable({
       {portfolio.length === 0 && (
         <div className="text-center py-8 text-gray-500 dark:text-gray-400">
           <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p>No coins added yet. Click &quot;Add Coin&quot; to start building your portfolio.</p>
+          <p>Setting up default portfolio...</p>
         </div>
       )}
     </div>

@@ -33,6 +33,8 @@ export default function Home() {
   }>({ spot: [], earn: [] });
   const [isOnline, setIsOnline] = useState(true);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  const [defaultCoinsLoading, setDefaultCoinsLoading] = useState(true);
+
 
   useEffect(() => {
     // Check online status
@@ -41,9 +43,8 @@ export default function Home() {
     window.addEventListener('offline', checkOnlineStatus);
     checkOnlineStatus();
 
-    // Load data from localStorage first (for immediate display)
+    // Load credentials from localStorage
     const savedCredentials = localStorage.getItem('binanceCredentials');
-    const savedPortfolio = localStorage.getItem('portfolio');
     
     if (savedCredentials) {
       const parsedCredentials = JSON.parse(savedCredentials);
@@ -54,9 +55,10 @@ export default function Home() {
       });
     }
     
-    if (savedPortfolio) {
-      setPortfolio(JSON.parse(savedPortfolio));
-    }
+    // Always load default portfolio - never use user-specific portfolios
+    loadDefaultCoins().catch(error => {
+      console.error('Default coins loading failed:', error);
+    });
 
     // Sync with cloud if online
     if (navigator.onLine) {
@@ -69,23 +71,43 @@ export default function Home() {
     };
   }, []);
 
+  const loadDefaultCoins = async () => {
+    try {
+      setDefaultCoinsLoading(true);
+      const response = await fetch('/api/default-coins');
+      const data = await response.json();
+      
+      if (response.ok && data?.coins?.length && data.coins.length > 0) {
+        // Create portfolio items from default coins data
+        const defaultPortfolioItems: PortfolioItem[] = data.coins.map((coinData: { coin: string; targetPercent: number }) => ({
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          coin: coinData.coin.trim(),
+          targetPercent: coinData.targetPercent
+        }));
+        
+        setPortfolio(defaultPortfolioItems);
+      } else {
+        console.error('Failed to load default coins:', data);
+      }
+    } catch (error) {
+      console.error('Failed to load default coins:', error);
+    } finally {
+      setDefaultCoinsLoading(false);
+    }
+  };
+
   const syncFromCloud = async () => {
     setSyncStatus('syncing');
     try {
-      // Fetch credentials from cloud
+      // Sync credentials only - no portfolio syncing
       const credentialsResult = await syncManager.fetchCredentials();
       if (credentialsResult.success && credentialsResult.data) {
         setCredentials(credentialsResult.data as BinanceCredentials);
         localStorage.setItem('binanceCredentials', JSON.stringify(credentialsResult.data));
       }
 
-      // Fetch portfolio from cloud
-      const portfolioResult = await syncManager.fetchPortfolio();
-      if (portfolioResult.success && portfolioResult.data) {
-        setPortfolio(portfolioResult.data as PortfolioItem[]);
-        localStorage.setItem('portfolio', JSON.stringify(portfolioResult.data));
-      }
-
+      // Portfolio is always the global default - no cloud sync needed
+      
       setSyncStatus('success');
     } catch (error) {
       console.error('Sync error:', error);
@@ -109,16 +131,9 @@ export default function Home() {
   };
 
   const handlePortfolioUpdate = async (newPortfolio: PortfolioItem[]) => {
-    setPortfolio(newPortfolio);
-    localStorage.setItem('portfolio', JSON.stringify(newPortfolio));
-
-    // Sync to cloud if online
-    if (isOnline) {
-      try {
-        await syncManager.syncPortfolio(newPortfolio);
-      } catch (error) {
-        console.error('Failed to sync portfolio:', error);
-      }
+    // Accept valid portfolio calculations 
+    if (newPortfolio && Array.isArray(newPortfolio) && newPortfolio.length > 0) {
+      setPortfolio(newPortfolio);
     }
   };
 
@@ -230,7 +245,6 @@ export default function Home() {
               <CoinListTable
                 credentials={credentials}
                 portfolio={portfolio}
-                onPortfolioUpdate={handlePortfolioUpdate}
                 setIsLoading={setIsLoading}
                 setError={setError}
                 walletBalances={walletBalances}

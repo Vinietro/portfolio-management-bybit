@@ -40,11 +40,24 @@ CREATE TABLE IF NOT EXISTS sync_log (
   device_id TEXT NOT NULL
 );
 
+-- Create default coins table for global defaults
+CREATE TABLE IF NOT EXISTS default_coins (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  coin_symbol TEXT NOT NULL UNIQUE,
+  target_percentage NUMERIC(5,2) NOT NULL CHECK (target_percentage >= 0 AND target_percentage <= 100),
+  display_order INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_portfolios_user_id ON portfolios(user_id);
 CREATE INDEX IF NOT EXISTS idx_credentials_user_id ON credentials(user_id);
 CREATE INDEX IF NOT EXISTS idx_sync_log_user_id ON sync_log(user_id);
 CREATE INDEX IF NOT EXISTS idx_sync_log_timestamp ON sync_log(timestamp);
+CREATE INDEX IF NOT EXISTS idx_default_coins_active ON default_coins(is_active);
+CREATE INDEX IF NOT EXISTS idx_default_coins_order ON default_coins(display_order);
 
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -64,3 +77,22 @@ CREATE TRIGGER update_portfolios_updated_at BEFORE UPDATE ON portfolios
 
 CREATE TRIGGER update_credentials_updated_at BEFORE UPDATE ON credentials
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_default_coins_updated_at BEFORE UPDATE ON default_coins
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Insert default coins data
+INSERT INTO default_coins (coin_symbol, target_percentage, display_order) VALUES 
+  ('ENAUSDT', 10.00, 1),
+  ('TAOUSDT', 10.00, 2),
+  ('SUIUSDT', 10.00, 3),
+  ('UNIUSDT', 12.00, 4),
+  ('APTUSDT', 12.00, 5),
+  ('AVAXUSDT', 12.00, 6),
+  ('PUMPUSDT', 8.00, 7),
+  ('SOLUSDT', 8.00, 8)
+ON CONFLICT (coin_symbol) DO UPDATE SET 
+  target_percentage = EXCLUDED.target_percentage,
+  display_order = EXCLUDED.display_order,
+  updated_at = NOW();
+
