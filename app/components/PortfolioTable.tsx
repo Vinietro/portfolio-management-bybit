@@ -8,6 +8,7 @@ interface PortfolioTableProps {
   portfolio: PortfolioItem[];
   onPortfolioUpdate: (portfolio: PortfolioItem[]) => void;
   onCredentialsUpdate: (credentials: BinanceCredentials) => void;
+  isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   onWalletBalancesUpdate?: (walletBalances: {
@@ -35,6 +36,7 @@ export default function PortfolioTable({
   portfolio,
   onPortfolioUpdate,
   onCredentialsUpdate,
+  isLoading,
   setIsLoading,
   setError,
   onWalletBalancesUpdate
@@ -397,6 +399,115 @@ export default function PortfolioTable({
                 )}
               </div>
             )}
+            
+            {/* Staking Actions - embedded in Earn Wallet */}
+            <div className="border-t border-gray-200 dark:border-gray-600 pt-3 mt-3">
+              <div className="flex gap-2">
+                {/* Stake USDT button */}
+                <button
+                  onClick={async () => {
+                    const amountStr = prompt('Enter USDT amount to stake:');
+                    if (amountStr === null) return;
+                    
+                    const amount = parseFloat(amountStr);
+                    if (isNaN(amount) || amount <= 0) {
+                      alert('Please enter a valid amount');
+                      return;
+                    }
+
+                    setIsLoading(true);
+                    setError(null);
+
+                    try {
+                      const response = await fetch('/api/staking', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          apiKey: credentials.apiKey,
+                          secretKey: credentials.secretKey,
+                          action: 'stake',
+                          amount: amount
+                        }),
+                      });
+
+                      const data = await response.json();
+
+                      if (data.success) {
+                        alert(`Successfully staked ${amount} USDT to Earn!\n\nNote: It may take a few minutes to appear in your Earn wallet.`);
+                        // Trigger refresh to update balances
+                        setTimeout(() => {
+                          fetchBalances();
+                        }, 2000);
+                      } else {
+                        setError(data.error || 'Failed to stake USDT');
+                      }
+                    } catch (error) {
+                      setError('Failed to stake USDT - ' + (error as Error).message);
+                    } finally {
+                      setIsLoading(false);
+                    }
+                  }}
+                  disabled={isLoading}
+                  className="flex-1 bg-green-600 text-white py-2 px-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                >
+                  {isLoading ? 'Staking...' : 'Stake'}
+                </button>
+
+                {/* Unstake USDT button */}
+                <button
+                  onClick={async () => {
+                    const amountStr = prompt('Enter USDT amount to unstake:');
+                    if (amountStr === null) return;
+                    
+                    const amount = parseFloat(amountStr);
+                    if (isNaN(amount) || amount <= 0) {
+                      alert('Please enter a valid amount');
+                      return;
+                    }
+
+                    setIsLoading(true);
+                    setError(null);
+
+                    try {
+                      const response = await fetch('/api/staking', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          apiKey: credentials.apiKey,
+                          secretKey: credentials.secretKey,
+                          action: 'unstake',
+                          amount: amount
+                        }),
+                      });
+
+                      const data = await response.json();
+
+                      if (data.success) {
+                        alert(`Successfully initiated unstaking of ${amount} USDT!\n\nNote: It may take up to 1 day for funds to appear in your spot wallet.`);
+                        // Trigger refresh to update balances
+                        setTimeout(() => {
+                          fetchBalances();
+                        }, 2000);
+                      } else {
+                        setError(data.error || 'Failed to unstake USDT');
+                      }
+                    } catch (error) {
+                      setError('Failed to unstake USDT - ' + (error as Error).message);
+                    } finally {
+                      setIsLoading(false);
+                    }
+                  }}
+                  disabled={isLoading}
+                  className="flex-1 bg-red-600 text-white py-2 px-3 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                >
+                  {isLoading ? 'Unstaking...' : 'Unstake'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 

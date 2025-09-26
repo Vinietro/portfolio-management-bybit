@@ -11,7 +11,7 @@ import { syncManager } from './lib/sync';
 export default function Home() {
   const [credentials, setCredentials] = useState<BinanceCredentials | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false); // eslint-disable-line @typescript-eslint/no-unused-vars
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [walletBalances, setWalletBalances] = useState<{
     spot: Array<{
@@ -218,6 +218,7 @@ export default function Home() {
                 portfolio={portfolio}
                 onPortfolioUpdate={handlePortfolioUpdate}
                 onCredentialsUpdate={handleCredentialsSave}
+                isLoading={isLoading}
                 setIsLoading={setIsLoading}
                 setError={setError}
                 onWalletBalancesUpdate={handleWalletBalancesUpdate}
