@@ -120,7 +120,9 @@ export default function CoinListTable({
     }
 
     // Get actual coin quantity from wallet balances
-    const spotBalance = walletBalances?.spot?.find(b => b.asset === item.coin);
+    // Normalize coin name: ENAUSDT -> ENA to match wallet balance format
+    const coinAssetName = item.coin.includes('USDT') ? item.coin.substring(0, item.coin.indexOf('USDT')) : item.coin;
+    const spotBalance = walletBalances?.spot?.find(b => b.asset === coinAssetName);
     const actualCoinQuantity = spotBalance ? parseFloat(spotBalance.free) + parseFloat(spotBalance.locked) : 0;
 
     if (actualCoinQuantity <= 0) {
@@ -360,7 +362,9 @@ export default function CoinListTable({
                       onClick={() => handleSellAll(item)}
                       disabled={(() => {
                         if (!item.coin) return true;
-                        const spotBalance = walletBalances?.spot?.find(b => b.asset === item.coin);
+                        // Normalize coin name: ENAUSDT -> ENA to match wallet balance format
+                        const coinAssetName = item.coin.includes('USDT') ? item.coin.substring(0, item.coin.indexOf('USDT')) : item.coin;
+                        const spotBalance = walletBalances?.spot?.find(b => b.asset === coinAssetName);
                         const actualCoinQuantity = spotBalance ? parseFloat(spotBalance.free) + parseFloat(spotBalance.locked) : 0;
                         return actualCoinQuantity <= 0;
                       })()}

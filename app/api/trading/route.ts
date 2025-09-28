@@ -42,7 +42,9 @@ async function makeSignedTradingRequest(endpoint: string, apiKey: string, secret
 
 // Helper function to get current price for a symbol
 async function getCurrentPrice(symbol: string): Promise<number> {
-  const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}USDT`);
+  // Ensure symbol has USDT suffix (it might already have it from the frontend)
+  const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+  const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${tradingSymbol}`);
   if (!response.ok) {
     throw new Error('Failed to fetch current price');
   }
@@ -52,8 +54,10 @@ async function getCurrentPrice(symbol: string): Promise<number> {
 
 // Helper function to get exchange info for a symbol to get trading rules
 async function getExchangeInfo(symbol: string) {
-  console.log('Fetching exchange info for symbol:', `${symbol}USDT`);
-  const response = await fetch(`https://api.binance.com/api/v3/exchangeInfo?symbol=${symbol}USDT`);
+  // Ensure symbol has USDT suffix (it might already have it from the frontend)
+  const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+  console.log('Fetching exchange info for symbol:', tradingSymbol);
+  const response = await fetch(`https://api.binance.com/api/v3/exchangeInfo?symbol=${tradingSymbol}`);
   if (!response.ok) {
     const errorText = await response.text();
     console.error('Failed to fetch exchange info:', response.status, errorText);
@@ -63,7 +67,7 @@ async function getExchangeInfo(symbol: string) {
   console.log('Exchange info response:', data);
   
   if (!data.symbols || data.symbols.length === 0) {
-    throw new Error(`Symbol ${symbol}USDT not found in exchange info`);
+    throw new Error(`Symbol ${tradingSymbol} not found in exchange info`);
   }
   
   return data.symbols[0];
@@ -118,6 +122,103 @@ async function getAccountInfo(apiKey: string, secretKey: string) {
   }
 
   return response.json();
+}
+
+// Helper function to unstake USDT from Earn wallet
+async function unstakeUSDTFromEarn(apiKey: string, secretKey: string, amount: number): Promise<{ success: boolean; message: string; unstakedAmount?: number }> {
+  try {
+    const timestamp = Date.now().toString();
+    const queryString = `timestamp=${timestamp}`;
+    const signature = crypto
+      .createHmac('sha256', secretKey)
+      .update(queryString)
+      .digest('hex');
+
+    // First get positions to find USDT staking product
+    const positionUrl = `https://api.binance.com/sapi/v1/simple-earn/flexible/position?${queryString}&signature=${signature}`;
+    const positionResponse = await fetch(positionUrl, {
+      headers: { 'X-MBX-APIKEY': apiKey },
+    });
+
+    if (!positionResponse.ok) {
+      const errorText = await positionResponse.text();
+      throw new Error(`Failed to get staking positions: ${errorText}`);
+    }
+
+    const positionData = await positionResponse.json();
+    const usdtPositions = positionData.rows?.filter((pos: { asset: string }) => pos.asset === 'USDT') || [];
+    
+    if (usdtPositions.length === 0) {
+      return { success: false, message: 'No staked USDT positions found in Earn wallet' };
+    }
+
+    // Calculate how much we can unstake from available positions
+    let remainingAmount = amount;
+    let totalUnstaked = 0;
+
+    for (const position of usdtPositions) {
+      if (remainingAmount <= 0) break;
+      
+      const availableAmount = parseFloat(position.totalAmount || '0');
+      const unstakeAmount = Math.min(remainingAmount, availableAmount);
+      
+      console.log(`Checking position: ${position.productId}, Available: ${availableAmount}, Attempting to unstake: ${unstakeAmount}`);
+      
+      if (unstakeAmount > 0.001 && position.productId) { // Only unstake if meaningful amount and position has valid product ID
+        // Execute unstaking - format amount to ensure proper API formatting
+        const formattedAmount = parseFloat(unstakeAmount.toFixed(8));
+        
+        if (formattedAmount > availableAmount) {
+          console.log(`Skipping position - unstaking amount ${formattedAmount} exceeds available ${availableAmount}`);
+          continue;
+        }
+        
+        if (!position.productId || formattedAmount <= 0) {
+          console.log(`Skipping position - invalid productId or amount: productId=${position.productId}, amount=${formattedAmount}`);
+          continue;
+        }
+        
+        console.log(`Attempting to unstake ${formattedAmount} USDT from position ${position.productId}`);
+        
+        // Ensure amount is sent as a proper decimal string for the API
+        const amountString = formattedAmount.toFixed(8);
+        const unstakeQueryString = `productId=${position.productId}&type=FAST&amount=${amountString}&timestamp=${timestamp}`;
+        
+        console.log(`Unstaking query: ${unstakeQueryString}`);
+        
+        const unstakeSignature = crypto
+          .createHmac('sha256', secretKey)
+          .update(unstakeQueryString)
+          .digest('hex');
+
+        const unstakeUrl = `https://api.binance.com/sapi/v1/simple-earn/flexible/redeem?${unstakeQueryString}&signature=${unstakeSignature}`;
+        
+        const unstakeResponse = await fetch(unstakeUrl, {
+          method: 'POST',
+          headers: { 'X-MBX-APIKEY': apiKey },
+        });
+
+        if (!unstakeResponse.ok) {
+          const errorText = await unstakeResponse.text();
+          throw new Error(`Failed to unstake ${unstakeAmount} USDT: ${errorText}`);
+        }
+
+        totalUnstaked += unstakeAmount;
+        remainingAmount -= unstakeAmount;
+      }
+    }
+
+    return { 
+      success: true, 
+      message: `Successfully unstaked ${totalUnstaked} USDT from Earn wallet`,
+      unstakedAmount: totalUnstaked 
+    };
+  } catch (error) {
+    return { 
+      success: false, 
+      message: `Failed to unstake USDT: ${error instanceof Error ? error.message : 'Unknown error'}` 
+    };
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -179,7 +280,57 @@ export async function POST(request: NextRequest) {
       const usdtBalance = accountInfo.balances.find((b: { asset: string }) => b.asset === 'USDT');
       const availableUsdt = parseFloat(usdtBalance?.free || '0');
       
-      if (availableUsdt < quantity) {
+      // Add small buffer (0.1%) for order formatting differences
+      const bufferedNeededAmount = quantity * 1.001;
+      
+      if (availableUsdt < bufferedNeededAmount && quantity >= 0.1) {
+        const neededAmount = bufferedNeededAmount - availableUsdt;
+        console.log(`Insufficient FREE USDT balance detected (${availableUsdt.toFixed(4)} free, need ${bufferedNeededAmount.toFixed(4)} with buffer 0.1%). Attempting to unstake ${neededAmount.toFixed(4)} USDT from Earn wallet`);
+        
+        const unstakeResult = await unstakeUSDTFromEarn(apiKey, secretKey, neededAmount);
+        
+        if (!unstakeResult.success) {
+          console.log(`Unstaking failed: ${unstakeResult.message}`);
+          
+          // Recheck final balance to ensure we've given a real balance report
+          const finalAccountInfo = await getAccountInfo(apiKey, secretKey);
+          const finalUSDTBalanceCheck = finalAccountInfo.balances.find((b: { asset: string; free: string; locked: string }) => b.asset === 'USDT');
+          const finalBalanceValue = finalUSDTBalanceCheck 
+            ? parseFloat(finalUSDTBalanceCheck.free) + parseFloat(finalUSDTBalanceCheck.locked) 
+            : 0;
+          
+          return NextResponse.json(
+            { 
+              error: `Insufficient USDT balance (${finalBalanceValue.toFixed(2)} USDT available, ${bufferedNeededAmount.toFixed(2)} USDT needed). Could not unstake additional USDT: ${unstakeResult.message}` 
+            },
+            { status: 400 }
+          );
+        } else {
+          console.log(`Successfully unstaked ${unstakeResult.unstakedAmount} USDT for trading: ${unstakeResult.message}`);
+          
+          // Wait a bit for the unstaking to process and recheck balance
+          console.log('Waiting for unstaking to process...');
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+          
+          // Recheck balance after unstaking
+          const finalAccountInfo = await getAccountInfo(apiKey, secretKey);
+          const finalUSDTBalance = finalAccountInfo.balances.find((b: { asset: string; free: string; locked: string }) => b.asset === 'USDT');
+          const finalFreeUSDT = parseFloat(finalUSDTBalance?.free || '0');
+          const finalLockedUSDT = parseFloat(finalUSDTBalance?.locked || '0');
+          
+          console.log(`Post-unstaking USDT balance check: FREE ${finalFreeUSDT.toFixed(4)}, LOCKED ${finalLockedUSDT.toFixed(4)}, required FREE ${bufferedNeededAmount.toFixed(4)} USDT`);
+          
+          if (finalFreeUSDT < bufferedNeededAmount - 0.01) { // Allow small tolerance for decimal precision
+            return NextResponse.json(
+              { 
+                error: `Still insufficient FREE USDT after unstaking: ${finalFreeUSDT.toFixed(2)} USDT free available, ${bufferedNeededAmount.toFixed(2)} USDT needed (unstaked: ${unstakeResult.unstakedAmount})` 
+              },
+              { status: 400 }
+            );
+          }
+          console.log(`✅ Balance verification passed, proceeding with trade`);
+        }
+      } else if (availableUsdt < quantity) {
         return NextResponse.json(
           { error: `Insufficient USDT balance. Available: ${availableUsdt.toFixed(2)} USDT, Required: ${quantity.toFixed(2)} USDT` },
           { status: 400 }
@@ -189,9 +340,12 @@ export async function POST(request: NextRequest) {
       // For SELL orders, check if user has enough coin balance
       console.log('Checking balance for SELL order');
       const accountInfo = await getAccountInfo(apiKey, secretKey);
-      console.log('Account info received, looking for balance of:', symbol);
       
-      const coinBalance = accountInfo.balances.find((b: { asset: string }) => b.asset === symbol);
+      // Normalize symbol name: ENAUSDT -> ENA to match Binance account balance format
+      const coinAssetName = symbol.endsWith('USDT') ? symbol.substring(0, symbol.indexOf('USDT')) : symbol;
+      console.log('Account info received, looking for balance of:', coinAssetName, '(normalized from:', symbol, ')');
+      
+      const coinBalance = accountInfo.balances.find((b: { asset: string }) => b.asset === coinAssetName);
       console.log('Coin balance found:', coinBalance);
       
       const availableCoin = parseFloat(coinBalance?.free || '0');
@@ -200,7 +354,7 @@ export async function POST(request: NextRequest) {
       if (availableCoin < quantity) {
         return NextResponse.json(
           { 
-            error: `Insufficient ${symbol} balance. Available: ${availableCoin.toFixed(6)} ${symbol}, Required: ${quantity.toFixed(6)} ${symbol}. You cannot sell more than you own.`,
+            error: `Insufficient ${symbol} balance. Available: ${availableCoin.toFixed(6)} ${symbol}, Required: ${quantity.toFixed(6)} ${symbol}. Please check your actual balance in Binance.`,
             availableBalance: availableCoin,
             requestedQuantity: quantity,
             symbol: symbol
@@ -237,8 +391,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Prepare order parameters
+    // Ensure symbol has USDT suffix (it might already have it from the frontend)
+    const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
     const orderParams: Record<string, string> = {
-      symbol: `${symbol}USDT`,
+      symbol: tradingSymbol,
       side: side,
       type: type,
       quantity: orderQuantity.toString(),

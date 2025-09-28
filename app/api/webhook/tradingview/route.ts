@@ -149,8 +149,10 @@ async function unstakeUSDTFromEarn(apiKey: string, secretKey: string, amount: nu
 
 // Helper function to get exchange info for trading rules
 async function getExchangeInfo(symbol: string) {
-  console.log('Fetching exchange info for symbol:', `${symbol}USDT`);
-  const response = await fetch(`https://api.binance.com/api/v3/exchangeInfo?symbol=${symbol}USDT`);
+  // Ensure symbol has USDT suffix (it might already have it from the frontend)
+  const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+  console.log('Fetching exchange info for symbol:', tradingSymbol);
+  const response = await fetch(`https://api.binance.com/api/v3/exchangeInfo?symbol=${tradingSymbol}`);
   if (!response.ok) {
     const errorText = await response.text();
     console.error('Failed to fetch exchange info:', response.status, errorText);
@@ -160,7 +162,7 @@ async function getExchangeInfo(symbol: string) {
   console.log('Exchange info response:', data);
   
   if (!data.symbols || data.symbols.length === 0) {
-    throw new Error(`Symbol ${symbol}USDT not found in exchange info`);
+    throw new Error(`Symbol ${tradingSymbol} not found in exchange info`);
   }
   
   return data.symbols[0];
@@ -212,7 +214,8 @@ async function executeMarketTrade(symbol: string, side: 'BUY' | 'SELL', quantity
   let orderQuantity = 0;
   if (side === 'BUY') {
     // Get current price
-    const priceResponse = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}USDT`);
+    const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+    const priceResponse = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${tradingSymbol}`);
     if (!priceResponse.ok) {
       throw new Error('Failed to fetch current price');
     }
@@ -243,7 +246,8 @@ async function executeMarketTrade(symbol: string, side: 'BUY' | 'SELL', quantity
   
   // Check minimum notional value
   if (currentPrice === 0) {
-    const priceResponse = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}USDT`);
+    const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+    const priceResponse = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${tradingSymbol}`);
     const priceData = await priceResponse.json();
     currentPrice = parseFloat(priceData.price);
   }
@@ -304,7 +308,8 @@ async function executeMarketTrade(symbol: string, side: 'BUY' | 'SELL', quantity
     }
   }
 
-  const queryString = `symbol=${symbol}USDT&side=${side}&type=MARKET&quantity=${orderQuantity.toFixed(8)}&timestamp=${timestamp}`;
+  const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+  const queryString = `symbol=${tradingSymbol}&side=${side}&type=MARKET&quantity=${orderQuantity.toFixed(8)}&timestamp=${timestamp}`;
   
   const signature = crypto
     .createHmac('sha256', secretKey)
