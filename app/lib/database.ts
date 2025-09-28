@@ -21,7 +21,9 @@ if (ENCRYPTION_KEY.length !== 32) {
 // Encryption functions
 export function encrypt(text: string): string {
   const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipher(ALGORITHM, ENCRYPTION_KEY);
+  // Hash the key to ensure it's exactly 32 bytes for AES-256
+  const key = crypto.createHash('sha256').update(ENCRYPTION_KEY).digest();
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
   let encrypted = cipher.update(text, 'utf8', 'hex');
   encrypted += cipher.final('hex');
   return iv.toString('hex') + ':' + encrypted;
@@ -29,9 +31,11 @@ export function encrypt(text: string): string {
 
 export function decrypt(encryptedText: string): string {
   const textParts = encryptedText.split(':');
-  textParts.shift(); // Remove iv from parts
+  const iv = Buffer.from(textParts.shift()!, 'hex'); // Get IV from first part
   const encryptedData = textParts.join(':');
-  const decipher = crypto.createDecipher(ALGORITHM, ENCRYPTION_KEY);
+  // Hash the key to ensure it's exactly 32 bytes for AES-256
+  const key = crypto.createHash('sha256').update(ENCRYPTION_KEY).digest();
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
   let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
   decrypted += decipher.final('utf8');
   return decrypted;
