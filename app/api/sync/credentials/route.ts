@@ -32,12 +32,24 @@ export async function POST(request: NextRequest) {
     console.error('Credentials sync error:', error);
     
     let errorMessage = 'Failed to sync credentials';
+    let errorDetails: string | undefined;
+    
     if (error && typeof error === 'object' && 'message' in error) {
       errorMessage = error.message as string;
     }
+    
+    // Check for specific encryption-related errors
+    if (errorMessage.includes('Invalid encryption key') || errorMessage.includes('ENCRYPTION_KEY')) {
+      errorMessage = 'Encryption configuration error. Please contact support.';
+      errorDetails = 'The encryption key is not properly configured.';
+    }
 
     return NextResponse.json(
-      { error: errorMessage },
+      { 
+        error: errorMessage,
+        details: errorDetails,
+        timestamp: new Date().toISOString()
+      },
       { status: 500 }
     );
   }

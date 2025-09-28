@@ -5,8 +5,18 @@ import crypto from 'crypto';
 const sql = neon(process.env.DATABASE_URL!);
 
 // Encryption key - in production, use environment variable
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'your-32-character-secret-key-here!';
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || process.env.NEXT_PUBLIC_ENCRYPTION_KEY || 'your-32-character-secret-key-here!';
 const ALGORITHM = 'aes-256-cbc';
+
+// Validate encryption key
+if (!process.env.ENCRYPTION_KEY) {
+  console.warn('WARNING: ENCRYPTION_KEY environment variable is not set. Using fallback key. This is not secure for production!');
+}
+
+if (ENCRYPTION_KEY.length !== 32) {
+  console.error('ERROR: ENCRYPTION_KEY must be exactly 32 characters long. Current length:', ENCRYPTION_KEY.length);
+  throw new Error('Invalid encryption key length');
+}
 
 // Encryption functions
 export function encrypt(text: string): string {
@@ -123,7 +133,15 @@ export async function getPortfolio(userId: string) {
 // Credentials management
 export async function saveCredentials(userId: string, credentials: Record<string, unknown>, deviceId: string) {
   try {
+    console.log(`Attempting to save credentials for user ${userId}`);
+    
+    // Validate credentials data
+    if (!credentials || Object.keys(credentials).length === 0) {
+      throw new Error('Credentials data is empty or invalid');
+    }
+    
     const encryptedCredentials = encrypt(JSON.stringify(credentials));
+    console.log(`Credentials encrypted successfully for user ${userId}`);
     
     // First try to get existing credentials
     const existingCredentials = await getCredentials(userId);
@@ -149,11 +167,14 @@ export async function saveCredentials(userId: string, credentials: Record<string
       return { id: result[0].id, version: result[0].version };
     } else {
       // Insert new credentials
+      console.log(`Inserting new credentials for user ${userId}`);
       const result = await sql`
         INSERT INTO credentials (user_id, encrypted_credentials, version)
         VALUES (${userId}, ${encryptedCredentials}, 1)
         RETURNING id, version
       `;
+      
+      console.log(`Credentials inserted successfully for user ${userId}, record ID: ${result[0].id}`);
       
       // Log sync operation
       await sql`
