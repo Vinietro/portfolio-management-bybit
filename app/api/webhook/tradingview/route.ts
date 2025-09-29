@@ -78,8 +78,18 @@ async function unstakeUSDTFromEarn(apiKey: string, secretKey: string, amount: nu
       return { success: false, message: 'No staked USDT positions found in Earn wallet' };
     }
 
+    // Calculate total available USDT across all positions
+    const totalAvailableUSDT = usdtPositions.reduce((sum: number, pos: { totalAmount?: string }) => sum + parseFloat(pos.totalAmount || '0'), 0);
+    console.log(`Total USDT available in Earn wallet: ${totalAvailableUSDT.toFixed(4)} USDT`);
+    
+    // If requested amount is more than available, unstake everything available
+    const amountToUnstake = Math.min(amount, totalAvailableUSDT);
+    if (amountToUnstake < amount) {
+      console.log(`Requested ${amount.toFixed(4)} USDT but only ${totalAvailableUSDT.toFixed(4)} available. Will unstake ${amountToUnstake.toFixed(4)} USDT`);
+    }
+    
     // Calculate how much we can unstake from available positions
-    let remainingAmount = amount;
+    let remainingAmount = amountToUnstake;
     let totalUnstaked = 0;
 
     for (const position of usdtPositions) {
@@ -126,19 +136,31 @@ async function unstakeUSDTFromEarn(apiKey: string, secretKey: string, amount: nu
 
         if (!unstakeResponse.ok) {
           const errorText = await unstakeResponse.text();
-          throw new Error(`Failed to unstake ${unstakeAmount} USDT: ${errorText}`);
+          console.log(`Failed to unstake from position ${position.productId}: ${errorText}`);
+          // Continue with other positions instead of failing completely
+          continue;
         }
+
+        const unstakeResult = await unstakeResponse.json();
+        console.log(`Unstaking result for position ${position.productId}:`, unstakeResult);
 
         totalUnstaked += unstakeAmount;
         remainingAmount -= unstakeAmount;
       }
     }
 
-    return { 
-      success: true, 
-      message: `Successfully unstaked ${totalUnstaked} USDT from Earn wallet`,
-      unstakedAmount: totalUnstaked 
-    };
+    if (totalUnstaked > 0) {
+      return { 
+        success: true, 
+        message: `Successfully unstaked ${totalUnstaked.toFixed(4)} USDT from Earn wallet`,
+        unstakedAmount: totalUnstaked 
+      };
+    } else {
+      return { 
+        success: false, 
+        message: `No USDT could be unstaked from Earn wallet. Total available: ${totalAvailableUSDT.toFixed(4)} USDT, requested: ${amount.toFixed(4)} USDT`
+      };
+    }
   } catch (error) {
     return { 
       success: false, 
@@ -604,10 +626,33 @@ export async function POST(request: NextRequest) {
               price: 0,
               totalValue: 0,
               order: null,
-              message: `Insufficient USDT balance to trade: ${availableForAllocation.toFixed(2)} USDT available (minimum 0.1 USDT required)`
+              message: `Insufficient USDT balance to trade: ${availableForAllocation.toFixed(2)} USDT available (minimum 0.1 USDT required). Spot: ${usdtFromSpot.toFixed(2)} USDT, Earn: ${usdtFromEarn.toFixed(2)} USDT`
             });
             worldResults.push({apiKey, userId, results: accountResults});
             continue; // Skip to next credential set
+          }
+          
+          // Early validation: Check if we have enough free USDT or if we can unstake from Earn
+          const freeUSDT = accountInfo.balances.find((b: { asset: string; free: string }) => b.asset === 'USDT')?.free || '0';
+          const freeUSDTAmount = parseFloat(freeUSDT);
+          const canUnstakeFromEarn = usdtFromEarn > 0;
+          
+          console.log(`Pre-trade validation: Free USDT: ${freeUSDTAmount.toFixed(4)}, Earn USDT: ${usdtFromEarn.toFixed(4)}, Can unstake: ${canUnstakeFromEarn}`);
+          
+          // If we don't have enough free USDT and no Earn balance, skip trading entirely
+          if (freeUSDTAmount < 0.1 && !canUnstakeFromEarn) {
+            accountResults.push({
+              success: false,
+              symbol: 'BALANCE',
+              side: 'BUY' as const,
+              quantity: 0,
+              price: 0,
+              totalValue: 0,
+              order: null,
+              message: `Insufficient USDT for trading: ${freeUSDTAmount.toFixed(2)} USDT free, ${usdtFromEarn.toFixed(2)} USDT in Earn (total: ${totalBalanceFromAPI.toFixed(2)} USDT). Cannot unstake from Earn wallet.`
+            });
+            worldResults.push({apiKey, userId, results: accountResults});
+            continue;
           }
           
           for (const coinData of filterCoins) {
@@ -627,70 +672,57 @@ export async function POST(request: NextRequest) {
               
               console.log(`Pre-trade USDT check for ${coinSymbol}: Free ${freeUSDT.toFixed(4)}, Locked ${lockedUSDT.toFixed(4)}, Total ${availableUSDTAfterCheck.toFixed(4)} USDT, Needed ${allocatedAmount.toFixed(4)} USDT`);
               
-              // Always try the trade first with free USDT, if insufficient then fallback to unstaking
-              const canTradeOnlyFreeUSDT = freeUSDT >= allocatedAmount;
-              if (!canTradeOnlyFreeUSDT) {
-                console.log(`Cannot trade with available free USDT (${freeUSDT.toFixed(4)}), will proceed with unstaking if locked funds exist`);
-              }
+              // Add small buffer (0.1% buffer) for the order formatting differences
+              const bufferedNeededAmount = allocatedAmount * 1.001; // 0.1% buffer to cover any rounding differences due to LOT_SIZE etc
               
-            // If not enough FREE USDT, try to unstake from Earn wallet
-            // Add small buffer (0.01 USDT) for the order formatting differences
-            const bufferedNeededAmount = allocatedAmount * 1.001; // 0.1% buffer to cover any rounding differences due to LOT_SIZE etc
-            if (freeUSDT < bufferedNeededAmount && allocatedAmount >= 0.1) {
-              const neededAmount = bufferedNeededAmount - freeUSDT;
-              console.log(`Insufficient FREE USDT balance detected (${freeUSDT.toFixed(4)} free, need ${bufferedNeededAmount.toFixed(4)} with buffer 0.1%). Attempting to unstake ${neededAmount.toFixed(4)} USDT from Earn wallet`);
+              // Check if we have enough free USDT for the trade
+              if (freeUSDT >= bufferedNeededAmount) {
+                console.log(`✅ Sufficient free USDT available: ${freeUSDT.toFixed(4)} USDT >= ${bufferedNeededAmount.toFixed(4)} USDT needed. Proceeding with trade.`);
+              } else if (freeUSDT < bufferedNeededAmount && allocatedAmount >= 0.1) {
+                // Not enough free USDT, try to unstake from Earn wallet
+                const neededAmount = bufferedNeededAmount - freeUSDT;
+                console.log(`Insufficient FREE USDT balance detected (${freeUSDT.toFixed(4)} free, need ${bufferedNeededAmount.toFixed(4)} with buffer 0.1%). Attempting to unstake ${neededAmount.toFixed(4)} USDT from Earn wallet`);
                 
-                const unstakeResult = await unstakeUSDTFromEarn(apiKey, secretKey, neededAmount);
-                
-                if (!unstakeResult.success) {
-                  console.log(`Unstaking failed: ${unstakeResult.message}`);
+                // Check if we have USDT in Earn wallet to unstake
+                if (usdtFromEarn > 0) {
+                  const unstakeResult = await unstakeUSDTFromEarn(apiKey, secretKey, neededAmount);
                   
-                  // Recheck final balance to ensure we've given a real balance report
-                  const finalAccountInfo = await getAccountInfo(apiKey, secretKey);
-                  const finalUSDTBalanceCheck = finalAccountInfo.balances.find((b: { asset: string; free: string; locked: string }) => b.asset === 'USDT');
-                  const finalBalanceValue = finalUSDTBalanceCheck 
-                    ? parseFloat(finalUSDTBalanceCheck.free) + parseFloat(finalUSDTBalanceCheck.locked) 
-                    : 0;
-                  
-                  throw new Error(`Insufficient USDT balance (${finalBalanceValue.toFixed(2)} USDT available, ${bufferedNeededAmount.toFixed(2)} USDT needed). Could not unstake additional USDT: ${unstakeResult.message}`);
-                } else {
-                  console.log(`Successfully unstaked ${unstakeResult.unstakedAmount} USDT for trading: ${unstakeResult.message}`);
-                  
-                  // Wait a bit longer for the unstaking to process and recheck balance
-                  console.log('Waiting for unstaking to process...');
-                  await new Promise(resolve => setTimeout(resolve, 5000));
-                  
-                  // Recheck balance after unstaking - check FREE USDT only as that's what's available for trading
-                  const updatedAccountInfo = await getAccountInfo(apiKey, secretKey);
-                  const updatedUSDTBalance = updatedAccountInfo.balances.find((b: { asset: string; free: string; locked: string }) => b.asset === 'USDT');
-                  const finalFreeUSDT = updatedUSDTBalance ? parseFloat(updatedUSDTBalance.free) : 0;
-                  const finalLockedUSDT = updatedUSDTBalance ? parseFloat(updatedUSDTBalance.locked) : 0;
+                  if (!unstakeResult.success) {
+                    console.log(`Unstaking failed: ${unstakeResult.message}`);
                     
-                  console.log(`Post-unstaking USDT balance check: FREE ${finalFreeUSDT.toFixed(4)}, LOCKED ${finalLockedUSDT.toFixed(4)}, required FREE ${bufferedNeededAmount.toFixed(4)} USDT`);
-                  
-                  if (finalFreeUSDT < bufferedNeededAmount - 0.01) { // Allow small tolerance for decimal precision
-                    throw new Error(`Still insufficient FREE USDT after unstaking: ${finalFreeUSDT.toFixed(2)} USDT free available, ${bufferedNeededAmount.toFixed(2)} USDT needed (unstaked: ${unstakeResult.unstakedAmount})`);
+                    // Recheck final balance to ensure we've given a real balance report
+                    const finalAccountInfo = await getAccountInfo(apiKey, secretKey);
+                    const finalUSDTBalanceCheck = finalAccountInfo.balances.find((b: { asset: string; free: string; locked: string }) => b.asset === 'USDT');
+                    const finalBalanceValue = finalUSDTBalanceCheck 
+                      ? parseFloat(finalUSDTBalanceCheck.free) + parseFloat(finalUSDTBalanceCheck.locked) 
+                      : 0;
+                    
+                    throw new Error(`Insufficient USDT balance (${finalBalanceValue.toFixed(2)} USDT available, ${bufferedNeededAmount.toFixed(2)} USDT needed). Could not unstake additional USDT: ${unstakeResult.message}`);
+                  } else {
+                    console.log(`Successfully unstaked ${unstakeResult.unstakedAmount} USDT for trading: ${unstakeResult.message}`);
+                    
+                    // Wait a bit longer for the unstaking to process and recheck balance
+                    console.log('Waiting for unstaking to process...');
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    
+                    // Recheck balance after unstaking - check FREE USDT only as that's what's available for trading
+                    const updatedAccountInfo = await getAccountInfo(apiKey, secretKey);
+                    const updatedUSDTBalance = updatedAccountInfo.balances.find((b: { asset: string; free: string; locked: string }) => b.asset === 'USDT');
+                    const finalFreeUSDT = updatedUSDTBalance ? parseFloat(updatedUSDTBalance.free) : 0;
+                    const finalLockedUSDT = updatedUSDTBalance ? parseFloat(updatedUSDTBalance.locked) : 0;
+                      
+                    console.log(`Post-unstaking USDT balance check: FREE ${finalFreeUSDT.toFixed(4)}, LOCKED ${finalLockedUSDT.toFixed(4)}, required FREE ${bufferedNeededAmount.toFixed(4)} USDT`);
+                    
+                    if (finalFreeUSDT < bufferedNeededAmount - 0.01) { // Allow small tolerance for decimal precision
+                      throw new Error(`Still insufficient FREE USDT after unstaking: ${finalFreeUSDT.toFixed(2)} USDT free available, ${bufferedNeededAmount.toFixed(2)} USDT needed (unstaked: ${unstakeResult.unstakedAmount})`);
+                    }
+                    console.log(`✅ Balance verification passed, proceeding with trade`);
                   }
-                  console.log(`✅ Balance verification passed, proceeding with trade`);
+                } else {
+                  throw new Error(`Insufficient USDT: only ${freeUSDT.toFixed(2)} free available, need ${bufferedNeededAmount.toFixed(2)} USDT. No USDT available in Earn wallet to unstake.`);
                 }
               } else {
-                console.log(`Insufficient free USDT, attempting unstaking anyways`);
-                
-                // As final fallback, if FREE USDT is not sufficient but total is, try unstaking anyway
-                if (freeUSDT < bufferedNeededAmount && availableUSDTAfterCheck > freeUSDT && allocatedAmount >= 0.1) {
-                  const alternativeNeededAmount = bufferedNeededAmount - freeUSDT;
-                  console.log(`Attempting final unstaking attempt: ${alternativeNeededAmount.toFixed(4)} USDT from Earn wallet`);
-                  
-                  const alternativeUnstakeResult = await unstakeUSDTFromEarn(apiKey, secretKey, alternativeNeededAmount);
-                  if (!alternativeUnstakeResult.success) {
-                    throw new Error(`Final attempt failed - insufficient USDT (${freeUSDT.toFixed(2)} free, ${bufferedNeededAmount.toFixed(2)} needed). Cannot unstake: ${alternativeUnstakeResult.message}`);
-                  }
-                  
-                  console.log(`Final unstaking successful: ${alternativeUnstakeResult.unstakedAmount} USDT unstaked`);
-                  await new Promise(resolve => setTimeout(resolve, 3000)); // Short wait before trade
-                } else {
-                  throw new Error(`Insufficient USDT: only ${freeUSDT.toFixed(2)} free available, need ${bufferedNeededAmount.toFixed(2)} USDT`);
-                }
+                throw new Error(`Insufficient USDT: only ${freeUSDT.toFixed(2)} free available, need ${bufferedNeededAmount.toFixed(2)} USDT. Trade amount too small (${allocatedAmount.toFixed(2)} USDT < 0.1 USDT minimum).`);
               }
 
               const result = await executeMarketTrade(
