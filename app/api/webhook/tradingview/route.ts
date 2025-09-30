@@ -331,7 +331,22 @@ async function executeMarketTrade(symbol: string, side: 'BUY' | 'SELL', quantity
   }
 
   const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
-  const queryString = `symbol=${tradingSymbol}&side=${side}&type=MARKET&quantity=${orderQuantity.toFixed(8)}&timestamp=${timestamp}`;
+  
+  // Format quantity based on step size to avoid precision errors
+  const stepSize = parseFloat(lotSizeFilter.stepSize);
+  let formattedQuantity: string;
+  if (stepSize >= 1) {
+    // For step sizes >= 1, use whole numbers
+    formattedQuantity = Math.floor(orderQuantity).toString();
+  } else {
+    // For step sizes < 1, calculate appropriate decimal places
+    const decimalPlaces = stepSize.toString().split('.')[1]?.length || 0;
+    formattedQuantity = orderQuantity.toFixed(decimalPlaces);
+  }
+  
+  console.log(`Final quantity formatting: stepSize=${stepSize}, orderQuantity=${orderQuantity}, formattedQuantity=${formattedQuantity}`);
+  
+  const queryString = `symbol=${tradingSymbol}&side=${side}&type=MARKET&quantity=${formattedQuantity}&timestamp=${timestamp}`;
   
   const signature = crypto
     .createHmac('sha256', secretKey)
@@ -672,8 +687,8 @@ export async function POST(request: NextRequest) {
               
               console.log(`Pre-trade USDT check for ${coinSymbol}: Free ${freeUSDT.toFixed(4)}, Locked ${lockedUSDT.toFixed(4)}, Total ${availableUSDTAfterCheck.toFixed(4)} USDT, Needed ${allocatedAmount.toFixed(4)} USDT`);
               
-              // Add small buffer (0.1% buffer) for the order formatting differences
-              const bufferedNeededAmount = allocatedAmount * 1.001; // 0.1% buffer to cover any rounding differences due to LOT_SIZE etc
+              // Add 2% buffer for price fluctuations and order formatting differences
+              const bufferedNeededAmount = allocatedAmount * 1.02; // 2% buffer to cover price fluctuations and rounding differences
               
               // Check if we have enough free USDT for the trade
               if (freeUSDT >= bufferedNeededAmount) {
@@ -681,7 +696,7 @@ export async function POST(request: NextRequest) {
               } else if (freeUSDT < bufferedNeededAmount && allocatedAmount >= 0.1) {
                 // Not enough free USDT, try to unstake from Earn wallet
                 const neededAmount = bufferedNeededAmount - freeUSDT;
-                console.log(`Insufficient FREE USDT balance detected (${freeUSDT.toFixed(4)} free, need ${bufferedNeededAmount.toFixed(4)} with buffer 0.1%). Attempting to unstake ${neededAmount.toFixed(4)} USDT from Earn wallet`);
+                console.log(`Insufficient FREE USDT balance detected (${freeUSDT.toFixed(4)} free, need ${bufferedNeededAmount.toFixed(4)} with buffer 2%). Attempting to unstake ${neededAmount.toFixed(4)} USDT from Earn wallet`);
                 
                 // Check if we have USDT in Earn wallet to unstake
                 if (usdtFromEarn > 0) {
