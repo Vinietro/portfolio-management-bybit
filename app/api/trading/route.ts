@@ -81,9 +81,16 @@ function formatQuantity(quantity: number, lotSizeFilter: { stepSize: string; min
   
   console.log('formatQuantity inputs:', { quantity, stepSize, minQty, maxQty });
   
-  // Round to step size first
+  // Calculate decimal places from step size to avoid floating point precision issues
+  const stepSizeStr = lotSizeFilter.stepSize;
+  const decimalPlaces = stepSizeStr.includes('.') ? stepSizeStr.split('.')[1].length : 0;
+  
+  // Round to step size using proper decimal precision
   const steps = Math.floor(quantity / stepSize);
   let formattedQuantity = steps * stepSize;
+  
+  // Round to the correct number of decimal places to avoid floating point precision issues
+  formattedQuantity = Math.round(formattedQuantity * Math.pow(10, decimalPlaces)) / Math.pow(10, decimalPlaces);
   
   // Ensure minimum quantity after rounding
   if (formattedQuantity < minQty) {
