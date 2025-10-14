@@ -33,6 +33,13 @@ export async function POST(req: Request) {
       }),
     });
 
+    console.log("Telegram request:", {
+      chat_id,
+      text,
+      parse_mode: "Markdown",
+    });
+    console.log("Telegram response:", response);
+
     const result = await response.json();
     if (!response.ok) {
       console.error("Telegram error:", result);
