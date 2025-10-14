@@ -8,8 +8,31 @@ let lastSendTime = 0;
 
 export async function POST(req: Request) {
   try {
-    const data = await req.json();
-    console.log("TradingView request:", data);
+    // Read the raw body as text first to handle potential malformed JSON
+    const rawBody = await req.text();
+    console.log("Raw request body:", rawBody);
+    
+    let data;
+    try {
+      // Try to parse the JSON
+      data = JSON.parse(rawBody);
+    } catch (parseError) {
+      console.error("JSON parse error:", parseError);
+      // Attempt to sanitize the body by removing/escaping control characters
+      const sanitized = rawBody.replace(/[\x00-\x1F\x7F]/g, (char) => {
+        // Replace common control characters with escaped versions
+        switch (char) {
+          case '\n': return '\\n';
+          case '\r': return '\\r';
+          case '\t': return '\\t';
+          default: return ''; // Remove other control characters
+        }
+      });
+      console.log("Sanitized body:", sanitized);
+      data = JSON.parse(sanitized);
+    }
+    
+    console.log("Parsed request:", data);
     const { chat_id = CHAT_ID, text } = data;
 
     if (!text) {
