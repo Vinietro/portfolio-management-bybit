@@ -9,6 +9,7 @@ let lastSendTime = 0;
 export async function POST(req: Request) {
   try {
     const data = await req.json();
+    console.log("TradingView request:", data);
     const { chat_id = CHAT_ID, text } = data;
 
     if (!text) {
