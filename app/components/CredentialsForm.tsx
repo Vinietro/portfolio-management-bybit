@@ -27,8 +27,8 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
     setError(null);
     
     try {
-      // Test the credentials by making a simple API call
-      const response = await fetch('/api/test-credentials', {
+      // Test the credentials by making a call to the balances endpoint
+      const response = await fetch('/api/balances', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
