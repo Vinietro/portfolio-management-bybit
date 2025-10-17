@@ -7,33 +7,18 @@ interface PortfolioTableProps {
   credentials: BingXCredentials;
   portfolio: PortfolioItem[];
   onPortfolioUpdate: (portfolio: PortfolioItem[]) => void;
-  onCredentialsUpdate: (credentials: BingXCredentials) => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  onWalletBalancesUpdate?: (walletBalances: {
-    futures: Array<{
-      asset: string;
-      free: string;
-      locked: string;
-      usdValue: number;
-      wallet: string;
-      pnl?: number;
-      pnlPercentage?: number;
-    }>;
-  }) => void;
 }
 
 export default function PortfolioTable({
   credentials,
   portfolio,
   onPortfolioUpdate,
-  onCredentialsUpdate,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   isLoading,
   setIsLoading,
-  setError,
-  onWalletBalancesUpdate
+  setError
 }: PortfolioTableProps) {
   const [totalBalance, setTotalBalance] = useState<number>(0);
   const [availableForAllocation, setAvailableForAllocation] = useState<number>(0);
@@ -48,17 +33,6 @@ export default function PortfolioTable({
       pnlPercentage: number;
     }>;
   } | null>(null);
-  const [walletBalances, setWalletBalances] = useState<Record<string, Array<{
-    asset: string;
-    free: string;
-    locked: string;
-    usdValue: number;
-    wallet: string;
-    pnl?: number;
-    pnlPercentage?: number;
-  }>>>({
-    futures: []
-  });
   const [lastFetchTime, setLastFetchTime] = useState<number>(0);
   const [isRateLimited, setIsRateLimited] = useState<boolean>(false);
 
@@ -112,13 +86,6 @@ export default function PortfolioTable({
 
       const data = await response.json();
       setTotalBalance(data.totalBalance);
-      const newWalletBalances = data.walletBalances || { futures: [] };
-      setWalletBalances(newWalletBalances);
-      
-      // Notify parent component of wallet balances update
-      if (onWalletBalancesUpdate) {
-        onWalletBalancesUpdate(newWalletBalances);
-      }
       
       // Calculate allocation logic - use full balance for allocation
       const totalBalanceFromApi = data.totalBalance;
@@ -213,7 +180,7 @@ export default function PortfolioTable({
     } finally {
       setIsLoading(false);
     }
-  }, [setIsLoading, setError, credentials, portfolio, onPortfolioUpdate, isRateLimited, lastFetchTime, onWalletBalancesUpdate, pnlData]);
+  }, [setIsLoading, setError, credentials, portfolio, onPortfolioUpdate, isRateLimited, lastFetchTime, pnlData]);
 
   const fetchPnlData = useCallback(async () => {
     if (!credentials?.apiKey) return;

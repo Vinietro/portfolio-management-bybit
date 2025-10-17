@@ -3,6 +3,42 @@ import crypto from 'crypto';
 import { neon } from '@neondatabase/serverless';
 import { getAllUserCredentials } from '../../lib/database';
 
+// Type definitions for BingX API responses
+interface BingXSymbolInfo {
+  symbol: string;
+  size: string;
+  quantityPrecision: number;
+  pricePrecision: number;
+  minQty: string;
+  maxQty: string;
+  stepSize: string;
+  baseAsset: string;
+  quoteAsset: string;
+}
+
+interface BingXPosition {
+  symbol: string;
+  positionAmt: string;
+  size?: string;
+  positionSide: string;
+  side?: string;
+  avgPrice: string;
+  entryPrice?: string;
+  markPrice: string;
+  unrealizedProfit: string;
+  unrealizedPnl?: string;
+  percentage?: string;
+}
+
+interface BingXBalance {
+  asset: string;
+  balance: string;
+  availableBalance?: string;
+  lockedBalance?: string;
+  free?: string;
+  locked?: string;
+}
+
 // Initialize Neon client
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -23,7 +59,7 @@ const TELEGRAM_URL = `https://api.telegram.org/bot8242037075:AAEIYbLIuxIQpEln4aE
 let lastSendTime = 0;
 
 // Helper function to create signed request for futures trading
-async function makeBingXFuturesRequest(endpoint: string, apiKey: string, secretKey: string, params: Record<string, any> = {}, method: 'GET' | 'POST' = 'POST') {
+async function makeBingXFuturesRequest(endpoint: string, apiKey: string, secretKey: string, params: Record<string, string | number | boolean> = {}, method: 'GET' | 'POST' = 'POST') {
   const timestamp = Date.now().toString();
   
   let url: string;
@@ -53,9 +89,9 @@ async function makeBingXFuturesRequest(endpoint: string, apiKey: string, secretK
     
     // Sort parameters alphabetically
     const sortedKeys = Object.keys(allParams).sort();
-    const sortedParams: Record<string, any> = {};
+    const sortedParams: Record<string, string | number | boolean> = {};
     sortedKeys.forEach(key => {
-      sortedParams[key] = (allParams as any)[key];
+      sortedParams[key] = (allParams as Record<string, string | number | boolean>)[key];
     });
     
     // Create parameter string for signature (sorted alphabetically)
@@ -147,14 +183,14 @@ async function getExchangeInfo(symbol: string) {
   }
   
   // Find the specific symbol in BingX futures response
-  const symbolInfo = data.data.find((s: any) => s.symbol === tradingSymbol);
+  const symbolInfo = data.data.find((s: BingXSymbolInfo) => s.symbol === tradingSymbol);
   if (!symbolInfo) {
     // Log available symbols for debugging
-    const availableSymbols = data.data.map((s: any) => s.symbol).slice(0, 20); // First 20 symbols
+    const availableSymbols = data.data.map((s: BingXSymbolInfo) => s.symbol).slice(0, 20); // First 20 symbols
     console.log(`❌ Symbol ${tradingSymbol} not found. Available symbols (first 20):`, availableSymbols);
     
     // Check if there's a similar symbol (case insensitive)
-    const similarSymbol = data.data.find((s: any) => 
+    const similarSymbol = data.data.find((s: BingXSymbolInfo) => 
       s.symbol.toLowerCase() === tradingSymbol.toLowerCase()
     );
     
@@ -225,7 +261,7 @@ async function getAccountInfo(apiKey: string, secretKey: string) {
   
   if (response.data?.assets) {
     // Multiple assets format
-    balances = response.data.assets.map((balance: any) => ({
+    balances = response.data.assets.map((balance: BingXBalance) => ({
       asset: balance.asset,
       free: balance.availableBalance || balance.balance || '0',
       locked: balance.lockedBalance || '0'
@@ -240,7 +276,7 @@ async function getAccountInfo(apiKey: string, secretKey: string) {
     }];
   } else if (response.data && Array.isArray(response.data)) {
     // Direct array format
-    balances = response.data.map((balance: any) => ({
+    balances = response.data.map((balance: BingXBalance) => ({
       asset: balance.asset,
       free: balance.balance || balance.availableBalance || '0',
       locked: balance.lockedBalance || '0'
@@ -269,7 +305,7 @@ async function getPositionInfo(apiKey: string, secretKey: string, symbol: string
     const positions = response.data?.positions || response.data || [];
     
     // Find the position for the specific symbol
-    const position = positions.find((pos: any) => pos.symbol === tradingSymbol);
+    const position = positions.find((pos: BingXPosition) => pos.symbol === tradingSymbol);
     
     if (!position) {
       return null;
@@ -433,7 +469,7 @@ async function openPosition(apiKey: string, secretKey: string, symbol: string, s
       tradingSymbol = `${baseAsset}-USDT`;
     }
     
-    const orderParams: Record<string, any> = {
+    const orderParams: Record<string, string | number> = {
       symbol: tradingSymbol,
       side: orderSide,
       positionSide: side, // Use the original side (LONG/SHORT) as positionSide
@@ -497,7 +533,7 @@ async function closePosition(apiKey: string, secretKey: string, symbol: string, 
       tradingSymbol = `${baseAsset}-USDT`;
     }
     
-    const orderParams: Record<string, any> = {
+    const orderParams: Record<string, string | number> = {
       symbol: tradingSymbol,
       side: closeSide,
       positionSide: positionInfo.side, // Use the position's current side
@@ -633,7 +669,27 @@ export async function POST(request: NextRequest) {
 
     console.log(`🚀 Processing ${action} action for ${symbol} across ${allCredentials.length} accounts`);
 
-    const results: any[] = [];
+    const results: Array<{
+      apiKey: string;
+      userId: string;
+      success: boolean;
+      action?: string;
+      symbol?: string;
+      side?: string;
+      quantity?: number;
+      price?: number;
+      totalValue?: number;
+      percentage?: number;
+      order?: unknown;
+      message?: string;
+      error?: string;
+      positionInfo?: {
+        originalSide: string;
+        entryPrice: number;
+        markPrice: number;
+        unrealizedPnl: number;
+      };
+    }> = [];
 
     // Process each set of credentials
     for (const userCreds of allCredentials) {
@@ -657,7 +713,25 @@ export async function POST(request: NextRequest) {
       console.log(`Processing ${action} for user ${userId} (${apiKey.substring(0, 8)}...)`);
 
       try {
-        let result: any;
+        let result: {
+          success: boolean;
+          action: string;
+          symbol?: string;
+          side?: string;
+          quantity?: number;
+          price?: number;
+          totalValue?: number;
+          percentage?: number;
+          order?: unknown;
+          message?: string;
+          error?: string;
+          positionInfo?: {
+            originalSide: string;
+            entryPrice: number;
+            markPrice: number;
+            unrealizedPnl: number;
+          };
+        };
 
         if (action === 'open') {
           // Open position
@@ -665,6 +739,13 @@ export async function POST(request: NextRequest) {
         } else if (action === 'close') {
           // Close position
           result = await closePosition(apiKey, secretKey, symbol, chatId);
+        } else {
+          // This should never happen due to validation above, but TypeScript needs it
+          result = {
+            success: false,
+            action,
+            error: 'Invalid action'
+          };
         }
 
         results.push({

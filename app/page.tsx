@@ -13,17 +13,6 @@ export default function Home() {
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [walletBalances, setWalletBalances] = useState<{
-    futures: Array<{
-      asset: string;
-      free: string;
-      locked: string;
-      usdValue: number;
-      wallet: string;
-      pnl?: number;
-      pnlPercentage?: number;
-    }>;
-  }>({ futures: [] });
   const [, setDefaultCoinsLoading] = useState(true);
 
 
@@ -101,9 +90,6 @@ export default function Home() {
     }
   };
 
-  const handleWalletBalancesUpdate = (newWalletBalances: typeof walletBalances) => {
-    setWalletBalances(newWalletBalances);
-  };
 
   const handleDisconnect = () => {
     setCredentials(null);
@@ -160,11 +146,9 @@ export default function Home() {
                 credentials={credentials}
                 portfolio={portfolio}
                 onPortfolioUpdate={handlePortfolioUpdate}
-                onCredentialsUpdate={handleCredentialsSave}
                 isLoading={isLoading}
                 setIsLoading={setIsLoading}
                 setError={setError}
-                onWalletBalancesUpdate={handleWalletBalancesUpdate}
               />
             </div>
             

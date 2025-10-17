@@ -1,5 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+
+interface BingXBalanceResponse {
+  asset: string;
+  balance: string;
+  equity?: string;
+  unrealizedProfit?: string;
+  realisedProfit?: string;
+  availableMargin?: string;
+  usedMargin?: string;
+  freezedMargin?: string;
+  availableBalance?: string;
+  lockedBalance?: string;
+  free?: string;
+  locked?: string;
+}
+
+interface BingXPriceResponse {
+  symbol: string;
+  price: string;
+}
 import { calculatePnlData } from '../../lib/pnl-calculator';
 
 interface BingXBalance {
@@ -71,11 +91,15 @@ async function getBingXFuturesAccountInfo(apiKey: string, secretKey: string): Pr
     console.log('📊 BingX Futures Balance Response:', JSON.stringify(response, null, 2));
     
     // Try different possible response structures
-    let balances: any[] = [];
+    let balances: Array<{
+      asset: string;
+      free: string;
+      locked: string;
+    }> = [];
     
     // Structure 1: response.data.balance (single balance object)
     if (response.data?.balance) {
-      const balance = response.data.balance;
+      const balance = response.data.balance as BingXBalanceResponse;
       balances = [{
         asset: balance.asset,
         free: balance.balance || balance.availableBalance || '0',
@@ -84,7 +108,7 @@ async function getBingXFuturesAccountInfo(apiKey: string, secretKey: string): Pr
     }
     // Structure 2: response.data.assets (array of assets)
     else if (response.data?.assets) {
-      balances = response.data.assets.map((balance: any) => ({
+      balances = response.data.assets.map((balance: BingXBalanceResponse) => ({
         asset: balance.asset,
         free: balance.availableBalance || balance.free || '0',
         locked: balance.lockedBalance || balance.locked || '0'
@@ -92,7 +116,7 @@ async function getBingXFuturesAccountInfo(apiKey: string, secretKey: string): Pr
     }
     // Structure 3: response.balances
     else if (response.balances) {
-      balances = response.balances.map((balance: any) => ({
+      balances = response.balances.map((balance: BingXBalanceResponse) => ({
         asset: balance.asset,
         free: balance.free || '0',
         locked: balance.locked || '0'
@@ -100,7 +124,7 @@ async function getBingXFuturesAccountInfo(apiKey: string, secretKey: string): Pr
     }
     // Structure 4: direct array
     else if (Array.isArray(response)) {
-      balances = response.map((balance: any) => ({
+      balances = response.map((balance: BingXBalanceResponse) => ({
         asset: balance.asset,
         free: balance.free || balance.availableBalance || '0',
         locked: balance.locked || balance.lockedBalance || '0'
@@ -127,7 +151,7 @@ async function getBingXFuturesAccountInfo(apiKey: string, secretKey: string): Pr
         const spotData = await spotResponse.json();
         console.log('📊 BingX Spot Balance Response (fallback):', JSON.stringify(spotData, null, 2));
         
-        const balances = spotData.balances?.map((balance: any) => ({
+        const balances = spotData.balances?.map((balance: BingXBalanceResponse) => ({
           asset: balance.asset,
           free: balance.free || '0',
           locked: balance.locked || '0'
@@ -157,7 +181,7 @@ async function getBingXFuturesPrices(): Promise<Record<string, string>> {
   // Transform to match expected format
   const prices: Record<string, string> = {};
   if (data.data) {
-    data.data.forEach((item: any) => {
+    data.data.forEach((item: BingXPriceResponse) => {
       prices[item.symbol] = item.price;
     });
   }

@@ -73,7 +73,12 @@ export async function POST(request: NextRequest) {
     // Use the merged trading endpoint with all credentials from database
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     
-    const requestBody: any = {
+    const requestBody: {
+      action: string;
+      symbol: string;
+      side?: string;
+      alertMessage?: string;
+    } = {
       action,
       symbol: symbol || ''
     };
@@ -130,7 +135,7 @@ export async function POST(request: NextRequest) {
     console.error('TradingView Webhook Error:', error);
     
     let errorMessage = 'Failed to process TradingView webhook';
-    let statusCode = 500;
+    const statusCode = 500;
 
     if (error && typeof error === 'object' && 'message' in error) {
       errorMessage = (error as Error).message;

@@ -97,25 +97,23 @@ export async function PUT(request: NextRequest) {
     }
 
     // Update coins in database
-    await sql.begin(async (tx) => {
-      // First, deactivate all existing coins
-      await tx`UPDATE default_coins SET is_active = false`;
-      
-      // Insert or update new coins
-      for (let i = 0; i < coins.length; i++) {
-        const coin = coins[i];
-        await tx`
-          INSERT INTO default_coins (coin_symbol, target_percentage, display_order, is_active)
-          VALUES (${coin.coin}, ${coin.targetPercent}, ${i + 1}, true)
-          ON CONFLICT (coin_symbol) 
-          DO UPDATE SET 
-            target_percentage = EXCLUDED.target_percentage,
-            display_order = EXCLUDED.display_order,
-            is_active = EXCLUDED.is_active,
-            updated_at = NOW()
-        `;
-      }
-    });
+    // First, deactivate all existing coins
+    await sql`UPDATE default_coins SET is_active = false`;
+    
+    // Insert or update new coins
+    for (let i = 0; i < coins.length; i++) {
+      const coin = coins[i];
+      await sql`
+        INSERT INTO default_coins (coin_symbol, target_percentage, display_order, is_active)
+        VALUES (${coin.coin}, ${coin.targetPercent}, ${i + 1}, true)
+        ON CONFLICT (coin_symbol) 
+        DO UPDATE SET 
+          target_percentage = EXCLUDED.target_percentage,
+          display_order = EXCLUDED.display_order,
+          is_active = EXCLUDED.is_active,
+          updated_at = NOW()
+      `;
+    }
 
     return NextResponse.json({ 
       success: true, 
