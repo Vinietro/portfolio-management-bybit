@@ -1,17 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { Eye, EyeOff, Key, Shield, DollarSign } from 'lucide-react';
-import { BinanceCredentials } from '../types';
+import { Eye, EyeOff, Key, Shield } from 'lucide-react';
+import { BingXCredentials } from '../types';
 
 interface CredentialsFormProps {
-  onSave: (credentials: BinanceCredentials) => void;
+  onSave: (credentials: BingXCredentials) => void;
 }
 
 export default function CredentialsForm({ onSave }: CredentialsFormProps) {
   const [apiKey, setApiKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
-  const [usdtEarnTarget, setUsdtEarnTarget] = useState('');
   const [showSecret, setShowSecret] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,8 +44,7 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
 
       onSave({ 
         apiKey, 
-        secretKey, 
-        usdtEarnTarget: usdtEarnTarget ? parseFloat(usdtEarnTarget) : undefined
+        secretKey
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Invalid credentials. Please check your API Key and Secret Key.';
@@ -70,7 +68,7 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-            placeholder="Enter your Binance API Key"
+            placeholder="Enter your BingX API Key"
             required
           />
         </div>
@@ -88,7 +86,7 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
             value={secretKey}
             onChange={(e) => setSecretKey(e.target.value)}
             className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-            placeholder="Enter your Binance Secret Key"
+            placeholder="Enter your BingX Secret Key"
             required
           />
           <button
@@ -102,28 +100,6 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
       </div>
 
 
-      <div>
-        <label htmlFor="usdtEarnTarget" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          USDT Earn Target (%)
-        </label>
-        <div className="relative">
-          <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            id="usdtEarnTarget"
-            type="number"
-            value={usdtEarnTarget}
-            onChange={(e) => setUsdtEarnTarget(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-            placeholder="Enter target percentage for USDT in Earn wallet"
-            step="0.1"
-            min="0"
-            max="100"
-          />
-        </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          Optional: Set your target percentage for USDT in Earn wallet (0-100%)
-        </p>
-      </div>
 
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
@@ -151,7 +127,7 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
         disabled={isLoading || !apiKey.trim() || !secretKey.trim()}
         className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
-        {isLoading ? 'Testing Credentials...' : 'Connect to Binance'}
+        {isLoading ? 'Testing Credentials...' : 'Connect to BingX'}
       </button>
     </form>
   );

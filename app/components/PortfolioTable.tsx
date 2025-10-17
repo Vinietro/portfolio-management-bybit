@@ -1,18 +1,18 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { BinanceCredentials, PortfolioItem } from '../types';
+import { BingXCredentials, PortfolioItem } from '../types';
 
 interface PortfolioTableProps {
-  credentials: BinanceCredentials;
+  credentials: BingXCredentials;
   portfolio: PortfolioItem[];
   onPortfolioUpdate: (portfolio: PortfolioItem[]) => void;
-  onCredentialsUpdate: (credentials: BinanceCredentials) => void;
+  onCredentialsUpdate: (credentials: BingXCredentials) => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   onWalletBalancesUpdate?: (walletBalances: {
-    spot: Array<{
+    futures: Array<{
       asset: string;
       free: string;
       locked: string;
@@ -20,13 +20,6 @@ interface PortfolioTableProps {
       wallet: string;
       pnl?: number;
       pnlPercentage?: number;
-    }>;
-    earn: Array<{
-      asset: string;
-      free: string;
-      locked: string;
-      usdValue: number;
-      wallet: string;
     }>;
   }) => void;
 }
@@ -64,8 +57,7 @@ export default function PortfolioTable({
     pnl?: number;
     pnlPercentage?: number;
   }>>>({
-    spot: [],
-    earn: []
+    futures: []
   });
   const [lastFetchTime, setLastFetchTime] = useState<number>(0);
   const [isRateLimited, setIsRateLimited] = useState<boolean>(false);
@@ -120,7 +112,7 @@ export default function PortfolioTable({
 
       const data = await response.json();
       setTotalBalance(data.totalBalance);
-      const newWalletBalances = data.walletBalances || { spot: [], earn: [] };
+      const newWalletBalances = data.walletBalances || { futures: [] };
       setWalletBalances(newWalletBalances);
       
       // Notify parent component of wallet balances update
@@ -128,20 +120,22 @@ export default function PortfolioTable({
         onWalletBalancesUpdate(newWalletBalances);
       }
       
-      // Calculate allocation logic
+      // Calculate allocation logic - use full balance for allocation
       const totalBalanceFromApi = data.totalBalance;
-      const usdtEarnPercent = credentials?.usdtEarnTarget || 0;
       
-      // Available for Allocation = Total Balance * (100 - USDT Earn percent)
-      const availableBalanceForCalculation = totalBalanceFromApi * (100 - usdtEarnPercent) / 100;
+      // Available for Allocation = Total Balance
+      const availableBalanceForCalculation = totalBalanceFromApi;
       setAvailableForAllocation(availableBalanceForCalculation);
       
       // Calculate portfolio data if valid coins exist
       if (portfolio && portfolio.length > 0) {
         console.log('📊 PortfolioTable: Processing portfolio with', portfolio.length, 'coins');
-        console.log('Total Balance:', totalBalanceFromApi, 'USDT Earn %:', usdtEarnPercent, 'Available:', availableBalanceForCalculation);
+        console.log('Total Balance:', totalBalanceFromApi, 'Available:', availableBalanceForCalculation);
         
-        const updatedPortfolio = portfolio.map(item => {
+        // Normalize portfolio percentages to ensure they sum to 100%
+        const normalizedPortfolio = normalizePortfolioPercentages(portfolio);
+        
+        const updatedPortfolio = normalizedPortfolio.map(item => {
           // Normalize coin name: ENAUSDT -> ENA
           const coinAssetName = item.coin.includes('USDT') ? item.coin.substring(0, item.coin.indexOf('USDT')) : item.coin;
           const currentAmount = data.balances[coinAssetName] || 0;
@@ -185,7 +179,7 @@ export default function PortfolioTable({
         setIsRateLimited(true);
         setError('Rate limit exceeded. Please wait 1 minute before refreshing.');
       } else {
-        setError('Failed to fetch portfolio data from Binance');
+        setError('Failed to fetch portfolio data from BingX');
       }
       
       // FALLBACK: Ensure allocation data is always displayed, even when API call fails
@@ -193,8 +187,7 @@ export default function PortfolioTable({
         console.log('🔄 PortfolioTable: API failed - triggering fallback allocation calculation');
         
         const defaultTotalBalance = 10000; // Fallback balance assumption when API fails  
-        const defaultUsdtEarnPercent = credentials?.usdtEarnTarget || 0;
-        const availableBalanceForCalculation = defaultTotalBalance * (100 - defaultUsdtEarnPercent) / 100;
+        const availableBalanceForCalculation = defaultTotalBalance;
         setAvailableForAllocation(availableBalanceForCalculation);
         
         const updatedPortfolio = portfolio.map(item => {
@@ -247,15 +240,14 @@ export default function PortfolioTable({
     if (portfolio && portfolio.length > 0) {
       console.log('🚀 PortfolioTable: Portfolio condition met with', portfolio.length, 'coins - processing allocation calculations');
       if (credentials) {
-        console.log('📈 PortfolioTable: Credentials available, fetching balance data from Binance API');
+        console.log('📈 PortfolioTable: Credentials available, fetching balance data from BingX API');
         fetchBalances();
       } else {
         console.log('📊 PortfolioTable: No credentials, calculating basic allocation targets without API data');
         
         // Ensure core allocation data shows even without credentials/API access  
         const defaultTotalBalance = 10000; // Conservative default for allocation display
-        const defaultUsdtEarnPercent = 0; // Default percentage since no credentials
-        const availableBalanceForCalculation = defaultTotalBalance * (100 - defaultUsdtEarnPercent) / 100;
+        const availableBalanceForCalculation = defaultTotalBalance;
         setAvailableForAllocation(availableBalanceForCalculation);
         
         const updatedPortfolio = portfolio.map(item => {
@@ -324,29 +316,24 @@ export default function PortfolioTable({
 
 
   const getTotalTargetPercent = () => {
-    const regularCoins = portfolio.filter(item => !item.isUsdtEarn);
-    return regularCoins.reduce((sum, item) => sum + item.targetPercent, 0);
+    return portfolio.reduce((sum, item) => sum + item.targetPercent, 0);
   };
 
-  const getRemainingAllocation = () => {
-    const usdtEarnPercent = credentials.usdtEarnTarget || 0;
-    return Math.max(0, 100 - usdtEarnPercent);
-  };
-
-  const getUsdtEarnTargetAmount = () => {
-    return (totalBalance * (credentials.usdtEarnTarget || 0)) / 100;
-  };
-
-  const getCurrentUsdtInEarn = () => {
-    return walletBalances.earn
-      .filter(balance => balance.asset === 'USDT')
-      .reduce((sum, balance) => sum + balance.usdValue, 0);
-  };
-
-  const getUsdtEarnNeeded = () => {
-    const targetAmount = getUsdtEarnTargetAmount();
-    const currentUsdtInEarn = getCurrentUsdtInEarn();
-    return Math.max(0, targetAmount - currentUsdtInEarn);
+  // Function to normalize portfolio percentages to ensure they sum to 100%
+  const normalizePortfolioPercentages = (portfolio: PortfolioItem[]): PortfolioItem[] => {
+    const totalPercent = portfolio.reduce((sum, item) => sum + item.targetPercent, 0);
+    
+    if (totalPercent === 0) return portfolio;
+    
+    // If total is not 100%, normalize all percentages proportionally
+    if (totalPercent !== 100) {
+      return portfolio.map(item => ({
+        ...item,
+        targetPercent: (item.targetPercent / totalPercent) * 100
+      }));
+    }
+    
+    return portfolio;
   };
 
 
@@ -361,47 +348,184 @@ export default function PortfolioTable({
     }).format(num);
   };
 
+  const testBalanceAPI = async () => {
+    if (!credentials?.apiKey || !credentials?.secretKey) {
+      setError('No credentials available for testing');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/test-balance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          apiKey: credentials.apiKey,
+          secretKey: credentials.secretKey
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        console.log('🧪 Balance API Test Results:', data);
+        alert(`Balance API Test Complete!\n\nCheck the browser console for detailed results.\n\nFutures Balance: ${data.results.futures?.ok ? 'OK' : 'Failed'}\nSpot Balance: ${data.results.spot?.ok ? 'OK' : 'Failed'}\nFutures Prices: ${data.results.futuresPrices?.ok ? 'OK' : 'Failed'}\nSpot Prices: ${data.results.spotPrices?.ok ? 'OK' : 'Failed'}`);
+      } else {
+        throw new Error(data.error || 'Test failed');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to test balance API';
+      setError(errorMessage);
+      console.error('Balance API test error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const checkDatabaseStatus = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/database-status');
+      const data = await response.json();
+      
+      if (response.ok) {
+        console.log('🗄️ Database Status:', data);
+        
+        if (data.success) {
+          const { tables, data: dbData } = data.database;
+          const status = data.database.status;
+          
+          let message = `Database Status: ${status === 'healthy' ? '✅ Healthy' : '⚠️ Needs Initialization'}\n\n`;
+          message += `Tables:\n`;
+          message += `✅ Existing: ${tables.existing.join(', ')}\n`;
+          if (tables.missing.length > 0) {
+            message += `❌ Missing: ${tables.missing.join(', ')}\n`;
+          }
+          message += `\nData:\n`;
+          message += `📊 Trading Transactions: ${dbData.trading_transactions}\n`;
+          message += `🪙 Default Coins: ${dbData.default_coins.count} (${dbData.default_coins.total_percentage}% total)\n`;
+          
+          if (status === 'needs_initialization') {
+            const init = confirm(`${message}\n\nWould you like to initialize the missing tables?`);
+            if (init) {
+              await initializeDatabase();
+            }
+          } else {
+            alert(message);
+          }
+        } else {
+          throw new Error(data.error || 'Database check failed');
+        }
+      } else {
+        throw new Error(data.error || 'Database check failed');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to check database status';
+      setError(errorMessage);
+      console.error('Database status check error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const initializeDatabase = async () => {
+    try {
+      const response = await fetch('/api/database-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        alert('✅ Database initialized successfully!\n\nAll required tables have been created.');
+        // Refresh the page to reload data
+        window.location.reload();
+      } else {
+        throw new Error(data.error || 'Database initialization failed');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to initialize database';
+      setError(errorMessage);
+      console.error('Database initialization error:', error);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Portfolio Overview Card */}
       <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-        <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Portfolio Overview</h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-semibold text-gray-900 dark:text-white">Portfolio Overview</h3>
+          <div className="flex gap-2">
+            <button
+              onClick={checkDatabaseStatus}
+              disabled={isLoading}
+              className="px-3 py-1 text-xs font-medium text-purple-700 bg-purple-100 dark:bg-purple-900/20 dark:text-purple-400 hover:bg-purple-200 dark:hover:bg-purple-900/30 disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed cursor-pointer transition-colors rounded-md"
+              title="Check Database Status"
+            >
+              🗄️ DB Status
+            </button>
+            <button
+              onClick={testBalanceAPI}
+              disabled={isLoading}
+              className="px-3 py-1 text-xs font-medium text-blue-700 bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/30 disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed cursor-pointer transition-colors rounded-md"
+              title="Test Balance API endpoints"
+            >
+              🧪 Test API
+            </button>
+          </div>
+        </div>
         <div className="flex flex-wrap justify-between gap-4">
           <div className="text-sm text-gray-600 dark:text-gray-400">
             Total Balance: <span className="font-semibold text-green-600">{formatCurrency(totalBalance)}</span>
           </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
-            <span>USDT Earn desired allocation:</span>
-            <input
-              type="number"
-              value={credentials.usdtEarnTarget || ''}
-              onChange={(e) => {
-                const value = parseFloat(e.target.value) || 0;
-                if (value >= 0 && value <= 100) {
-                  const updatedCredentials = { ...credentials, usdtEarnTarget: value };
-                  localStorage.setItem('binanceCredentials', JSON.stringify(updatedCredentials));
-                  onCredentialsUpdate(updatedCredentials);
-                }
-              }}
-              className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="0"
-              step="0.1"
-              min="0"
-              max="100"
-            />
-            <span className="text-gray-500">%</span>
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            Available for trading: <span className="font-semibold text-blue-600">{formatCurrency(availableForAllocation)} (100%)</span>
           </div>
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            Spot trading capital: <span className="font-semibold text-blue-600">{formatCurrency(availableForAllocation)} ({getRemainingAllocation().toFixed(1)}%)</span>
-          </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            Spot trading capital allocation: <span className="font-semibold">{getTotalTargetPercent().toFixed(1)}%</span>
+            Futures trading capital allocation: <span className={`font-semibold ${getTotalTargetPercent() === 100 ? 'text-green-600' : 'text-red-600'}`}>{getTotalTargetPercent().toFixed(1)}%</span>
+            {getTotalTargetPercent() !== 100 && (
+              <span className="ml-2 text-xs text-red-500">(Must equal 100%)</span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Portfolio and Earn Wallet Side by Side */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Portfolio Validation Warning */}
+      {getTotalTargetPercent() !== 100 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-yellow-800">
+                Portfolio Allocation Warning
+              </h3>
+              <div className="mt-2 text-sm text-yellow-700">
+                <p>
+                  Your portfolio allocation totals {getTotalTargetPercent().toFixed(1)}% but must equal exactly 100%. 
+                  The system will automatically normalize your allocations to ensure they sum to 100%.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Trading Performance */}
+      <div className="grid grid-cols-1 gap-6">
         {/* Left side - P&L Section */}
         <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
           <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Trading Performance</h3>
@@ -444,130 +568,6 @@ export default function PortfolioTable({
           </div>
         </div>
 
-        {/* Right side - Earn Wallet */}
-        <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-semibold text-gray-900 dark:text-white">Earn Wallet</h3>
-            {credentials.usdtEarnTarget && (
-              <button
-                onClick={() => {
-                  const newTarget = prompt('Enter new USDT Earn target (%):', credentials.usdtEarnTarget?.toString() || '0');
-                  if (newTarget !== null) {
-                    const targetValue = parseFloat(newTarget);
-                    if (!isNaN(targetValue) && targetValue >= 0 && targetValue <= 100) {
-                      const updatedCredentials = { ...credentials, usdtEarnTarget: targetValue };
-                      localStorage.setItem('binanceCredentials', JSON.stringify(updatedCredentials));
-                      onCredentialsUpdate(updatedCredentials);
-                    } else {
-                      alert('Please enter a valid percentage between 0 and 100');
-                    }
-                  }
-                }}
-                className="text-xs text-blue-600 hover:text-blue-800 transition-colors"
-              >
-                Edit Target
-              </button>
-            )}
-          </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            {walletBalances.earn.length > 0 ? (
-              <div className="space-y-1">
-                {walletBalances.earn.map((balance, index) => (
-                  <div key={index} className="flex justify-between">
-                    <span>{balance.asset}</span>
-                    <span className="font-medium">{formatCurrency(balance.usdValue)}</span>
-                  </div>
-                ))}
-                {/* Show USDT Earn target and difference */}
-                {credentials.usdtEarnTarget && (
-                  <>
-                    <div className="border-t border-gray-200 dark:border-gray-600 pt-2 mt-2">
-                      <div className="flex justify-between text-xs">
-                        <span>Target %:</span>
-                        <span className="font-medium">{credentials.usdtEarnTarget.toFixed(1)}%</span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span>Target Amount:</span>
-                        <span className="font-medium">{formatCurrency(getUsdtEarnTargetAmount())}</span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span>Current USDT:</span>
-                        <span className="font-medium">
-                          {formatCurrency(walletBalances.earn.filter(b => b.asset === 'USDT').reduce((sum, b) => sum + b.usdValue, 0))}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span>Current USDT %:</span>
-                        <span className="font-medium">
-                          {totalBalance > 0 ? ((walletBalances.earn.filter(b => b.asset === 'USDT').reduce((sum, b) => sum + b.usdValue, 0) / totalBalance) * 100).toFixed(1) : '0.0'}%
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span>USDT Difference:</span>
-                        <span className={`font-medium ${
-                          walletBalances.earn.filter(b => b.asset === 'USDT').reduce((sum, b) => sum + b.usdValue, 0) - getUsdtEarnTargetAmount() >= 0
-                            ? 'text-green-600' 
-                            : 'text-red-600'
-                        }`}>
-                          {formatCurrency(
-                            walletBalances.earn.filter(b => b.asset === 'USDT').reduce((sum, b) => sum + b.usdValue, 0) - getUsdtEarnTargetAmount()
-                          )}
-                        </span>
-                      </div>
-                      <div className={`flex justify-between text-xs p-2 rounded ${
-                        getUsdtEarnNeeded() > 0 ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800' : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
-                      }`}>
-                        <span className="font-medium">USDT Needed:</span>
-                        <span className={`font-bold ${
-                          getUsdtEarnNeeded() > 0 ? 'text-red-600' : 'text-green-600'
-                        }`}>
-                          {formatCurrency(getUsdtEarnNeeded())}
-                        </span>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-1">
-                <span className="text-gray-400">No balances</span>
-                {credentials.usdtEarnTarget && (
-                  <div className="border-t border-gray-200 dark:border-gray-600 pt-2 mt-2">
-                    <div className="flex justify-between text-xs">
-                      <span>Target %:</span>
-                      <span className="font-medium">{credentials.usdtEarnTarget.toFixed(1)}%</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span>Target Amount:</span>
-                      <span className="font-medium">{formatCurrency(getUsdtEarnTargetAmount())}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span>Current USDT:</span>
-                      <span className="font-medium">{formatCurrency(0)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span>Current USDT %:</span>
-                      <span className="font-medium">0.0%</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span>USDT Difference:</span>
-                      <span className="text-red-600 font-medium">
-                        {formatCurrency(-getUsdtEarnTargetAmount())}
-                      </span>
-                    </div>
-                      <div className="flex justify-between text-xs p-2 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-                        <span className="font-medium">USDT Needed:</span>
-                        <span className="text-red-600 font-bold">
-                          {formatCurrency(getUsdtEarnTargetAmount())}
-                        </span>
-                      </div>
-                  </div>
-                )}
-              </div>
-            )}
-            
-          </div>
-        </div>
 
       </div>
     </div>

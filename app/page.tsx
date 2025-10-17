@@ -5,16 +5,16 @@ import { Wallet, Settings, AlertCircle } from 'lucide-react';
 import CredentialsForm from './components/CredentialsForm';
 import PortfolioTable from './components/PortfolioTable';
 import CoinListTable from './components/CoinListTable';
-import { BinanceCredentials, PortfolioItem } from './types';
+import { BingXCredentials, PortfolioItem } from './types';
 import { SyncManager } from './lib/sync';
 
 export default function Home() {
-  const [credentials, setCredentials] = useState<BinanceCredentials | null>(null);
+  const [credentials, setCredentials] = useState<BingXCredentials | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [walletBalances, setWalletBalances] = useState<{
-    spot: Array<{
+    futures: Array<{
       asset: string;
       free: string;
       locked: string;
@@ -23,27 +23,19 @@ export default function Home() {
       pnl?: number;
       pnlPercentage?: number;
     }>;
-    earn: Array<{
-      asset: string;
-      free: string;
-      locked: string;
-      usdValue: number;
-      wallet: string;
-    }>;
-  }>({ spot: [], earn: [] });
+  }>({ futures: [] });
   const [, setDefaultCoinsLoading] = useState(true);
 
 
   useEffect(() => {
     // Load credentials from localStorage
-    const savedCredentials = localStorage.getItem('binanceCredentials');
+    const savedCredentials = localStorage.getItem('bingxCredentials');
     
     if (savedCredentials) {
       const parsedCredentials = JSON.parse(savedCredentials);
       setCredentials({
         apiKey: parsedCredentials.apiKey,
-        secretKey: parsedCredentials.secretKey,
-        usdtEarnTarget: parsedCredentials.usdtEarnTarget || parsedCredentials.usdcEarnTarget
+        secretKey: parsedCredentials.secretKey
       });
     }
     
@@ -79,10 +71,10 @@ export default function Home() {
   };
 
 
-  const handleCredentialsSave = async (creds: BinanceCredentials) => {
+  const handleCredentialsSave = async (creds: BingXCredentials) => {
     // Save to localStorage first  
     setCredentials(creds);
-    localStorage.setItem('binanceCredentials', JSON.stringify(creds));
+    localStorage.setItem('bingxCredentials', JSON.stringify(creds));
     setError(null);
     
     // Save to database in background (non-blocking)
@@ -115,7 +107,7 @@ export default function Home() {
 
   const handleDisconnect = () => {
     setCredentials(null);
-    localStorage.removeItem('binanceCredentials');
+    localStorage.removeItem('bingxCredentials');
     setError(null);
   };
 
@@ -146,7 +138,7 @@ export default function Home() {
               <div className="flex items-center gap-3 mb-6">
                 <Settings className="h-6 w-6 text-blue-600" />
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                  Binance API Setup
+                  BingX API Setup
                 </h2>
               </div>
               <CredentialsForm onSave={handleCredentialsSave} />
@@ -161,7 +153,7 @@ export default function Home() {
                   Portfolio Overview
                 </h2>
                 <div className="text-sm text-gray-500 dark:text-gray-400">
-                  Connected to Binance
+                  Connected to BingX
                 </div>
               </div>
               <PortfolioTable
@@ -184,7 +176,6 @@ export default function Home() {
                 setIsLoading={setIsLoading}
                 setError={setError}
                 onDisconnect={handleDisconnect}
-                walletBalances={walletBalances}
               />
             </div>
           </div>

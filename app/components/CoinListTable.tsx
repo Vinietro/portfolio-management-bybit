@@ -2,30 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { DollarSign, LogOut } from 'lucide-react';
-import { PortfolioItem, BinanceCredentials } from '../types';
+import { PortfolioItem, BingXCredentials } from '../types';
 
 interface CoinListTableProps {
-  credentials: BinanceCredentials;
+  credentials: BingXCredentials;
   portfolio: PortfolioItem[];
   setIsLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   onDisconnect?: () => void;
-  walletBalances?: {
-    spot: Array<{
-      asset: string;
-      free: string;
-      locked: string;
-      usdValue: number;
-      wallet: string;
-    }>;
-    earn: Array<{
-      asset: string;
-      free: string;
-      locked: string;
-      usdValue: number;
-      wallet: string;
-    }>;
-  };
 }
 
 export default function CoinListTable({
@@ -33,8 +17,7 @@ export default function CoinListTable({
   portfolio,
   setIsLoading,
   setError,
-  onDisconnect,
-  walletBalances
+  onDisconnect
 }: CoinListTableProps) {
   const [positionStatuses, setPositionStatuses] = useState<{[symbol: string]: {symbol: string; is_open: boolean; last_transaction_type?: string}}>({});
 
@@ -61,123 +44,6 @@ export default function CoinListTable({
     fetchPositionStatus();
   }, [credentials?.apiKey, fetchPositionStatus]);
 
-  const handleBuyToTarget = async (item: PortfolioItem) => {
-    if (!item.coin || !item.difference || item.difference <= 0) {
-      setError('Cannot buy: Coin name is missing or already at/above allocation.');
-      return;
-    }
-    
-    const amountToBuy = item.difference;
-    const message = `Buy ${amountToBuy.toFixed(6)} ${item.coin} to reach your allocation?\n\nThis will place a market buy order on Binance using your current balance.`;
-    
-    if (!confirm(message)) {
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/trading', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          apiKey: credentials.apiKey,
-          secretKey: credentials.secretKey,
-          symbol: item.coin,
-          side: 'BUY',
-          quantity: amountToBuy, // This will be converted to USD amount in the API
-          type: 'MARKET'
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to execute buy order');
-      }
-
-      alert(`Buy order executed successfully!\n\nOrder Details:\n- Symbol: ${data.symbol}\n- Quantity: ${data.quantity.toFixed(6)} ${data.symbol}\n- Price: ${data.price.toFixed(2)} USDT\n- Total Value: ${data.totalValue.toFixed(2)} USDT`);
-      
-      // Refresh position status and portfolio data after successful trade
-      await fetchPositionStatus();
-      window.location.reload();
-      
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to execute buy order';
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSellAll = async (item: PortfolioItem) => {
-    if (!item.coin) {
-      setError('Cannot sell: Coin name is missing.');
-      return;
-    }
-
-    // Get actual coin quantity from wallet balances
-    // Normalize coin name: ENAUSDT -> ENA to match wallet balance format
-    const coinAssetName = item.coin.includes('USDT') ? item.coin.substring(0, item.coin.indexOf('USDT')) : item.coin;
-    const spotBalance = walletBalances?.spot?.find(b => b.asset === coinAssetName);
-    const actualCoinQuantity = spotBalance ? parseFloat(spotBalance.free) + parseFloat(spotBalance.locked) : 0;
-
-    if (actualCoinQuantity <= 0) {
-      setError(`Cannot sell: No ${item.coin} balance found in your wallet.`);
-      return;
-    }
-    
-    const message = `Sell entire position of ${actualCoinQuantity.toFixed(6)} ${item.coin}?\n\nThis will place a market sell order on Binance.`;
-    
-    if (!confirm(message)) {
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/trading', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          apiKey: credentials.apiKey,
-          secretKey: credentials.secretKey,
-          symbol: item.coin,
-          side: 'SELL',
-          quantity: actualCoinQuantity,
-          type: 'MARKET'
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        // Check if it's a balance error and show detailed information
-        if (data.availableBalance !== undefined && data.requestedQuantity !== undefined) {
-          throw new Error(`Insufficient ${data.symbol} balance. Available: ${data.availableBalance.toFixed(6)} ${data.symbol}, Requested: ${data.requestedQuantity.toFixed(6)} ${data.symbol}. Please check your actual balance in Binance.`);
-        }
-        throw new Error(data.error || 'Failed to execute sell order');
-      }
-
-      alert(`Sell order executed successfully!\n\nOrder Details:\n- Symbol: ${data.symbol}\n- Quantity: ${data.quantity.toFixed(6)} ${data.symbol}\n- Price: ${data.price.toFixed(2)} USDT\n- Total Value: ${data.totalValue.toFixed(2)} USDT`);
-      
-      // Refresh position status and portfolio data after successful trade
-      await fetchPositionStatus();
-      window.location.reload();
-      
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to execute sell order';
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -225,7 +91,7 @@ export default function CoinListTable({
       }
 
       // Clear local storage
-      localStorage.removeItem('binanceCredentials');
+      localStorage.removeItem('bingxCredentials');
       
       // Call the disconnect callback if provided
       if (onDisconnect) {
@@ -273,7 +139,6 @@ export default function CoinListTable({
               <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">Current %</th>
               <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">Position Status</th>
               <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">Acumulated PNL</th>
-              <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -347,33 +212,6 @@ export default function CoinListTable({
                   ) : (
                     <span className="text-gray-400">-</span>
                   )}
-                </td>
-                <td className="py-3 px-4">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleBuyToTarget(item)}
-                      disabled={!item.coin || !item.difference || item.difference <= 0}
-                      className="px-3 py-1 text-xs font-medium text-green-700 bg-green-100 dark:bg-green-900/20 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/30 disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed cursor-pointer transition-colors rounded-md"
-                      title="Buy remaining amount to reach allocation"
-                    >
-                      BUY ALLOCATION
-                    </button>
-                    <button
-                      onClick={() => handleSellAll(item)}
-                      disabled={(() => {
-                        if (!item.coin) return true;
-                        // Normalize coin name: ENAUSDT -> ENA to match wallet balance format
-                        const coinAssetName = item.coin.includes('USDT') ? item.coin.substring(0, item.coin.indexOf('USDT')) : item.coin;
-                        const spotBalance = walletBalances?.spot?.find(b => b.asset === coinAssetName);
-                        const actualCoinQuantity = spotBalance ? parseFloat(spotBalance.free) + parseFloat(spotBalance.locked) : 0;
-                        return actualCoinQuantity <= 0;
-                      })()}
-                      className="px-3 py-1 text-xs font-medium text-red-700 bg-red-100 dark:bg-red-900/20 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/30 disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed cursor-pointer transition-colors rounded-md"
-                      title="Sell entire position"
-                    >
-                      CLOSE POSITION
-                    </button>
-                  </div>
                 </td>
               </tr>
               );

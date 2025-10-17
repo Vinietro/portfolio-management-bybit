@@ -1,7 +1,6 @@
-export interface BinanceCredentials {
+export interface BingXCredentials {
   apiKey: string;
   secretKey: string;
-  usdtEarnTarget?: number; // Target percentage for USDT in Earn wallet (0-100)
 }
 
 export interface PortfolioItem {
@@ -14,26 +13,15 @@ export interface PortfolioItem {
   difference?: number;
   pnl?: number;
   pnlPercentage?: number;
-  isUsdtEarn?: boolean; // Flag to identify USDT Earn allocation
   positionStatus?: 'open' | 'closed' | 'unknown';
 }
 
-export interface BinanceBalance {
+export interface BingXBalance {
   asset: string;
   free: string;
   locked: string;
 }
 
-export interface BinanceEarnBalance {
-  asset: string;
-  totalAmount: string;
-  tierAnnualPercentageRate: string;
-  latestAnnualPercentageRate: string;
-  yesterdayRealTimeRewards: string;
-  totalBonusRewards: string;
-  totalRealTimeRewards: string;
-  totalRewards: string;
-}
 
 
 export interface WalletBalance {

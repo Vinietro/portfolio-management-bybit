@@ -1,5 +1,5 @@
--- Portfolio Management Database Schema
--- For Vercel Postgres
+-- Initialize Portfolio Management Database
+-- Run this script to create all necessary tables
 
 -- Create users table (for future multi-user support)
 CREATE TABLE IF NOT EXISTS users (
@@ -51,42 +51,6 @@ CREATE TABLE IF NOT EXISTS default_coins (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create indexes for better performance
-CREATE INDEX IF NOT EXISTS idx_portfolios_user_id ON portfolios(user_id);
-CREATE INDEX IF NOT EXISTS idx_credentials_user_id ON credentials(user_id);
-CREATE INDEX IF NOT EXISTS idx_sync_log_user_id ON sync_log(user_id);
-CREATE INDEX IF NOT EXISTS idx_sync_log_timestamp ON sync_log(timestamp);
-CREATE INDEX IF NOT EXISTS idx_default_coins_active ON default_coins(is_active);
-CREATE INDEX IF NOT EXISTS idx_default_coins_order ON default_coins(display_order);
-CREATE INDEX IF NOT EXISTS idx_trading_transactions_api_key ON trading_transactions(api_key_hash);
-CREATE INDEX IF NOT EXISTS idx_trading_transactions_symbol ON trading_transactions(symbol);
-CREATE INDEX IF NOT EXISTS idx_trading_transactions_created_at ON trading_transactions(created_at);
-CREATE INDEX IF NOT EXISTS idx_position_status_api_key ON position_status(api_key_hash);
-CREATE INDEX IF NOT EXISTS idx_position_status_symbol ON position_status(symbol);
-CREATE INDEX IF NOT EXISTS idx_position_status_is_open ON position_status(is_open);
-
--- Create updated_at trigger function
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ language 'plpgsql';
-
--- Create triggers for updated_at
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_portfolios_updated_at BEFORE UPDATE ON portfolios
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_credentials_updated_at BEFORE UPDATE ON credentials
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_default_coins_updated_at BEFORE UPDATE ON default_coins
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 -- Create trading transactions table for tracking entries/exits
 CREATE TABLE IF NOT EXISTS trading_transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -113,6 +77,36 @@ CREATE TABLE IF NOT EXISTS position_status (
   UNIQUE(api_key_hash, symbol)     -- One record per symbol per user
 );
 
+-- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_portfolios_user_id ON portfolios(user_id);
+CREATE INDEX IF NOT EXISTS idx_credentials_user_id ON credentials(user_id);
+CREATE INDEX IF NOT EXISTS idx_sync_log_user_id ON sync_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_sync_log_timestamp ON sync_log(timestamp);
+CREATE INDEX IF NOT EXISTS idx_trading_transactions_api_key ON trading_transactions(api_key_hash);
+CREATE INDEX IF NOT EXISTS idx_trading_transactions_symbol ON trading_transactions(symbol);
+CREATE INDEX IF NOT EXISTS idx_trading_transactions_created_at ON trading_transactions(created_at);
+CREATE INDEX IF NOT EXISTS idx_position_status_api_key ON position_status(api_key_hash);
+CREATE INDEX IF NOT EXISTS idx_position_status_symbol ON position_status(symbol);
+
+-- Create function to update updated_at column
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create triggers for updated_at columns
+CREATE TRIGGER update_portfolios_updated_at BEFORE UPDATE ON portfolios
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_credentials_updated_at BEFORE UPDATE ON credentials
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_default_coins_updated_at BEFORE UPDATE ON default_coins
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TRIGGER update_position_status_updated_at BEFORE UPDATE ON position_status
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -131,3 +125,6 @@ ON CONFLICT (coin_symbol) DO UPDATE SET
   display_order = EXCLUDED.display_order,
   updated_at = NOW();
 
+-- Verify tables were created
+SELECT 'Database initialized successfully!' as status;
+SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;

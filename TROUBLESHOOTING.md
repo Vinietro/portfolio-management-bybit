@@ -1,8 +1,8 @@
-# Binance API Signature Validation Error Troubleshooting
+# BingX API Signature Validation Error Troubleshooting
 
 ## Error: "Signature for this request is not valid" (Code: -1022)
 
-This error occurs when Binance cannot validate the signature of your API request. Here are the most common causes and solutions:
+This error occurs when BingX cannot validate the signature of your API request. Here are the most common causes and solutions:
 
 ## 1. Check Your API Credentials
 
@@ -17,7 +17,7 @@ Your API key needs the following permissions:
 - **Enable Spot & Margin Trading** - Required for balance information
 
 **To check permissions:**
-1. Go to Binance.com → API Management
+1. Go to BingX.com → API Management
 2. Find your API key and check the permissions
 3. If permissions are missing, edit the API key and add the required permissions
 
@@ -27,11 +27,11 @@ Your API key needs the following permissions:
 If your API key has IP restrictions:
 - Make sure your current IP address is whitelisted
 - You can find your IP at https://whatismyipaddress.com/
-- Add your IP to the whitelist in Binance API Management
+- Add your IP to the whitelist in BingX API Management
 
 ### Remove IP Restrictions (Temporary)
 For testing purposes, you can temporarily remove IP restrictions:
-1. Go to Binance.com → API Management
+1. Go to BingX.com → API Management
 2. Edit your API key
 3. Uncheck "Enable Reading" under IP restrictions
 4. **Remember to re-enable IP restrictions for security**
@@ -39,7 +39,7 @@ For testing purposes, you can temporarily remove IP restrictions:
 ## 3. Time Synchronization
 
 ### Check Server Time
-The error can occur if your system time is not synchronized with Binance servers.
+The error can occur if your system time is not synchronized with BingX servers.
 
 **To check time synchronization:**
 1. Run the test script: `node test-binance-api.js`
@@ -62,13 +62,13 @@ The error can occur if your system time is not synchronized with Binance servers
 
 ### Check Internet Connection
 - Ensure you have a stable internet connection
-- Try accessing Binance.com to verify connectivity
+- Try accessing BingX.com to verify connectivity
 - Check if you're behind a VPN or proxy that might be blocking requests
 
 ## 6. Rate Limiting
 
 ### Check Rate Limits
-- Binance has rate limits on API calls
+- BingX has rate limits on API calls
 - If you're making too many requests, wait a few minutes and try again
 - The error might be due to hitting rate limits
 
@@ -82,7 +82,7 @@ The error can occur if your system time is not synchronized with Binance servers
 
 ### Manual Testing
 You can also test your credentials manually:
-1. Go to Binance.com → API Management
+1. Go to BingX.com → API Management
 2. Click "Test" next to your API key
 3. This will verify if your credentials work
 
@@ -109,8 +109,8 @@ You can also test your credentials manually:
 If you've tried all the above and still get the error:
 
 1. **Create a new API key** - Sometimes starting fresh helps
-2. **Contact Binance Support** - They can help with API-specific issues
-3. **Check Binance Status** - API might be experiencing issues
+2. **Contact BingX Support** - They can help with API-specific issues
+3. **Check BingX Status** - API might be experiencing issues
 4. **Try from a different network** - In case of network-specific issues
 
 ## Error Codes Reference

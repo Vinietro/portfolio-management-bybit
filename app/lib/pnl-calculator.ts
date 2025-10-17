@@ -1,4 +1,3 @@
-import Binance from 'binance-api-node';
 import crypto from 'crypto';
 
 interface Trade {
@@ -13,29 +12,31 @@ interface Trade {
 
 
 
-// Helper function to create signed request
-async function makeSignedRequest(endpoint: string, apiKey: string, secretKey: string, params: Record<string, string> = {}) {
+// Helper function to create BingX signature
+function createBingXSignature(params: string, secretKey: string): string {
+  return crypto.createHmac('sha256', secretKey).update(params).digest('hex');
+}
+
+// Helper function to make BingX API request
+async function makeBingXRequest(endpoint: string, apiKey: string, secretKey: string, params: Record<string, string> = {}) {
   const timestamp = Date.now().toString();
   const queryString = Object.entries({ ...params, timestamp })
     .map(([key, value]) => `${key}=${value}`)
     .join('&');
   
-  const signature = crypto
-    .createHmac('sha256', secretKey)
-    .update(queryString)
-    .digest('hex');
-
-  const url = `https://api.binance.com${endpoint}?${queryString}&signature=${signature}`;
+  const signature = createBingXSignature(queryString, secretKey);
+  const url = `https://open-api.bingx.com${endpoint}?${queryString}&signature=${signature}`;
   
   const response = await fetch(url, {
     headers: {
-      'X-MBX-APIKEY': apiKey,
+      'X-BX-APIKEY': apiKey,
+      'Content-Type': 'application/json',
     },
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`API Error ${response.status}: ${errorText}`);
+    throw new Error(`BingX API Error ${response.status}: ${errorText}`);
   }
 
   return response.json();
@@ -52,14 +53,20 @@ export async function calculatePnlData(apiKey: string, secretKey: string, assets
   }
 
   try {
-    // Create Binance client
-    const client = Binance({
-      apiKey: apiKey,
-      apiSecret: secretKey
-    });
-
-    // Get current prices
-    const tickerPrices = await client.prices();
+    // Get current prices from BingX
+    const tickerResponse = await fetch('https://open-api.bingx.com/openApi/spot/v1/ticker/price');
+    if (!tickerResponse.ok) {
+      throw new Error('Failed to fetch prices from BingX');
+    }
+    const tickerData = await tickerResponse.json();
+    
+    // Convert to price lookup object
+    const tickerPrices: Record<string, string> = {};
+    if (tickerData.data && Array.isArray(tickerData.data)) {
+      tickerData.data.forEach((ticker: { symbol: string; price: string }) => {
+        tickerPrices[ticker.symbol] = ticker.price;
+      });
+    }
 
     for (const asset of assets) {
       if (asset === 'USDT' || asset === 'USD') {
@@ -87,11 +94,13 @@ export async function calculatePnlData(apiKey: string, secretKey: string, assets
       }
 
       try {
-        // Get trading history for this asset  
-        const trades: Trade[] = await makeSignedRequest('/api/v3/myTrades', apiKey, secretKey, {
+        // Get trading history for this asset from BingX
+        const tradesResponse = await makeBingXRequest('/openApi/spot/v1/trade/history', apiKey, secretKey, {
           symbol: symbol,
           limit: '1000' // Get last 1000 trades
         });
+        
+        const trades: Trade[] = tradesResponse.data || [];
 
         if (trades.length === 0) {
           continue;

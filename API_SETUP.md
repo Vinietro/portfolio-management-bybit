@@ -1,33 +1,26 @@
-# Binance API Setup for Spot, Earn Balances and Trading
+# BingX API Setup for Futures Trading with 1x Leverage
 
 This application supports:
-- **Spot Wallet** - Regular trading balances with PNL tracking
-- **Earn Wallet** - Simple Earn positions
-- **Trading** - Buy/sell orders to rebalance your portfolio
+- **Futures Wallet** - Perpetual futures trading balances with PNL tracking
+- **Trading** - Buy/sell futures orders to rebalance your portfolio with 1x leverage
 
 ## Required API Permissions
 
-To access spot and earn balances and enable trading functionality, your Binance API key needs specific permissions:
+To access futures balances and enable trading functionality, your BingX API key needs specific permissions:
 
-### 1. Spot Trading Permissions
-1. Go to [Binance.com](https://www.binance.com) → API Management
+### 1. Futures Trading Permissions
+1. Go to [BingX.com](https://www.bingx.com) → API Management
 2. Select your API key or create a new one
 3. Enable the following permissions:
-   - ✅ **Enable Spot & Margin Trading** (for spot balances and trading)
+   - ✅ **Enable Futures Trading** (for futures balances and trading)
    - ✅ **Enable Reading** (for balance information)
 
-### 2. Simple Earn Permissions
-1. In the same API Management page
-2. Enable the following permissions:
-   - ✅ **Enable Simple Earn**
-   - ✅ **Enable Reading** (for earn balance information)
-
-### 3. Trading Permissions (Optional)
-For the buy/sell buttons to work, you need:
-   - ✅ **Enable Spot & Margin Trading** (already required above)
-   - ✅ **Enable Reading** (already required above)
+### 2. Trading Permissions (Required)
+For futures trading to work, you need:
+   - ✅ **Enable Futures Trading** (required for futures orders)
+   - ✅ **Enable Reading** (required for balance information)
    
-**Note**: Trading functionality is optional. The application will work for balance tracking without trading permissions, but the buy/sell buttons will be disabled.
+**Note**: Futures trading requires both permissions. The application uses 1x leverage for all trades to minimize risk.
 
 ### 4. Security Settings
 - **IP Restrictions**: Recommended to whitelist your IP address
@@ -36,32 +29,30 @@ For the buy/sell buttons to work, you need:
 
 ## API Endpoints Used
 
-The application uses the following Binance API endpoints:
+The application uses the following BingX Futures API endpoints:
 
-### Spot Balances
-- `GET /api/v3/account` - Account information and spot balances
+### Futures Balances
+- `GET /openApi/swap/v2/user/balance` - Account information and futures balances
 
-### Earn Balances
-- `GET /sapi/v1/simple-earn/flexible/position` - Simple Earn flexible positions
-- `GET /sapi/v1/simple-earn/account` - Simple Earn account summary (fallback)
 
 ### Trading Operations
-- `GET /api/v3/account` - Account information for balance checks
-- `GET /api/v3/ticker/price` - Current market prices
-- `POST /api/v3/order` - Place buy/sell orders
+- `GET /openApi/swap/v2/user/balance` - Account information for balance checks
+- `GET /openApi/swap/v2/quote/price` - Current futures market prices
+- `POST /openApi/swap/v2/trade/order` - Place buy/sell futures orders with 1x leverage
+- `GET /openApi/swap/v2/quote/contracts` - Futures trading pair information
 
 ## Error Handling
 
 The application includes comprehensive error handling for common issues:
 
 ### Common Error Codes
-- **-1022**: Signature validation failed (check credentials, time sync, IP restrictions)
-- **-2015**: Invalid API key
-- **-2014**: Missing API key  
-- **-2013**: Invalid API key/secret
-- **-2011**: No permissions (enable required permissions)
-- **-1001**: Request timeout
-- **-1003**: Rate limit exceeded
+- **INVALID_SIGNATURE**: Signature validation failed (check credentials, time sync, IP restrictions)
+- **INVALID_API_KEY**: Invalid API key
+- **MISSING_API_KEY**: Missing API key  
+- **INVALID_CREDENTIALS**: Invalid API key/secret
+- **INSUFFICIENT_PERMISSIONS**: No permissions (enable required permissions)
+- **REQUEST_TIMEOUT**: Request timeout
+- **RATE_LIMIT_EXCEEDED**: Rate limit exceeded
 
 ### Troubleshooting
 1. **Time Synchronization**: Ensure your system time is synchronized
@@ -81,14 +72,23 @@ The application includes comprehensive error handling for common issues:
 
 1. Enter your API credentials in the application
 2. Click "Test Credentials" to verify basic connectivity
-3. Check the wallet breakdown to see balances from both wallets
-4. Use the buy/sell buttons in the portfolio table to rebalance your positions
-5. If earn balances don't appear or trading fails, check the console for specific error messages
+3. Check the wallet breakdown to see your futures balances
+4. The application will automatically execute futures trades with 1x leverage when rebalancing
+5. If balances don't appear or trading fails, check the console for specific error messages
+
+## Important Notes
+
+- **Leverage**: All trades are executed with 1x leverage to minimize risk
+- **Futures Trading**: This application trades perpetual futures contracts, not spot assets
+- **Risk Management**: Futures trading involves additional risks compared to spot trading
+- **Margin Requirements**: Ensure you have sufficient margin in your futures account
+- **Portfolio Allocation**: All portfolio allocations must sum to exactly 100%
+- **Automatic Normalization**: If allocations don't sum to 100%, the system will automatically normalize them proportionally
 
 ## Support
 
 If you encounter issues:
 1. Check the browser console for detailed error messages
 2. Verify your API key permissions match the requirements above
-3. Test your credentials using the Binance API Management page
-4. Ensure your system time is synchronized with Binance servers 
+3. Test your credentials using the BingX API Management page
+4. Ensure your system time is synchronized with BingX servers 

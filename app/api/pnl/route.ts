@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     console.error('Error fetching PNL data:', error);
     
-    let errorMessage = 'Failed to fetch PNL data from Binance';
+    let errorMessage = 'Failed to fetch PNL data from BingX';
     let statusCode = 500;
     let errorCode: number | undefined;
 
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
           statusCode = 401;
           break;
         case -2011:
-          errorMessage = 'API key does not have the required permissions. Please check your API key permissions in Binance.';
+          errorMessage = 'API key does not have the required permissions. Please check your API key permissions in BingX.';
           statusCode = 401;
           break;
         case -1001:
