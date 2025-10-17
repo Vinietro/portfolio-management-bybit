@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { BingXCredentials, PortfolioItem } from '../types';
+import { BybitCredentials, PortfolioItem } from '../types';
 
 interface PortfolioTableProps {
-  credentials: BingXCredentials;
+  credentials: BybitCredentials;
   portfolio: PortfolioItem[];
   onPortfolioUpdate: (portfolio: PortfolioItem[]) => void;
   isLoading: boolean;
@@ -146,7 +146,7 @@ export default function PortfolioTable({
         setIsRateLimited(true);
         setError('Rate limit exceeded. Please wait 1 minute before refreshing.');
       } else {
-        setError('Failed to fetch portfolio data from BingX');
+        setError('Failed to fetch portfolio data from Bybit');
       }
       
       // FALLBACK: Ensure allocation data is always displayed, even when API call fails
@@ -207,7 +207,7 @@ export default function PortfolioTable({
     if (portfolio && portfolio.length > 0) {
       console.log('🚀 PortfolioTable: Portfolio condition met with', portfolio.length, 'coins - processing allocation calculations');
       if (credentials) {
-        console.log('📈 PortfolioTable: Credentials available, fetching balance data from BingX API');
+        console.log('📈 PortfolioTable: Credentials available, fetching balance data from Bybit API');
         fetchBalances();
       } else {
         console.log('📊 PortfolioTable: No credentials, calculating basic allocation targets without API data');

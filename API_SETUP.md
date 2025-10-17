@@ -1,4 +1,4 @@
-# BingX API Setup for Futures Trading with 1x Leverage
+# Bybit API Setup for Futures Trading with 1x Leverage
 
 This application supports:
 - **Futures Wallet** - Perpetual futures trading balances with PNL tracking
@@ -6,10 +6,10 @@ This application supports:
 
 ## Required API Permissions
 
-To access futures balances and enable trading functionality, your BingX API key needs specific permissions:
+To access futures balances and enable trading functionality, your Bybit API key needs specific permissions:
 
 ### 1. Futures Trading Permissions
-1. Go to [BingX.com](https://www.bingx.com) → API Management
+1. Go to [Bybit.com](https://www.bybit.com) → API Management
 2. Select your API key or create a new one
 3. Enable the following permissions:
    - ✅ **Enable Futures Trading** (for futures balances and trading)
@@ -20,7 +20,7 @@ For futures trading to work, you need:
    - ✅ **Enable Futures Trading** (required for futures orders)
    - ✅ **Enable Reading** (required for balance information)
    
-**Note**: Futures trading requires both permissions. The application uses 1x leverage for all trades to minimize risk.
+**Note**: Futures trading requires both permissions. The application **automatically enforces 1x leverage** for all trades to minimize risk and ensure consistent position sizing.
 
 ### 4. Security Settings
 - **IP Restrictions**: Recommended to whitelist your IP address
@@ -29,17 +29,17 @@ For futures trading to work, you need:
 
 ## API Endpoints Used
 
-The application uses the following BingX Futures API endpoints:
+The application uses the following Bybit Futures API endpoints:
 
 ### Futures Balances
-- `GET /openApi/swap/v2/user/balance` - Account information and futures balances
+- `GET /v5/account/wallet-balance` - Account information and futures balances
 
 
 ### Trading Operations
-- `GET /openApi/swap/v2/user/balance` - Account information for balance checks
-- `GET /openApi/swap/v2/quote/price` - Current futures market prices
-- `POST /openApi/swap/v2/trade/order` - Place buy/sell futures orders with 1x leverage
-- `GET /openApi/swap/v2/quote/contracts` - Futures trading pair information
+- `GET /v5/account/wallet-balance` - Account information for balance checks
+- `GET /v5/market/tickers` - Current futures market prices
+- `POST /v5/order/create` - Place buy/sell futures orders with 1x leverage
+- `GET /v5/market/instruments-info` - Futures trading pair information
 
 ## Error Handling
 
@@ -78,7 +78,7 @@ The application includes comprehensive error handling for common issues:
 
 ## Important Notes
 
-- **Leverage**: All trades are executed with 1x leverage to minimize risk
+- **Leverage**: All trades are **automatically executed with 1x leverage** to minimize risk. The system enforces this by setting leverage before each order.
 - **Futures Trading**: This application trades perpetual futures contracts, not spot assets
 - **Risk Management**: Futures trading involves additional risks compared to spot trading
 - **Margin Requirements**: Ensure you have sufficient margin in your futures account
@@ -90,5 +90,5 @@ The application includes comprehensive error handling for common issues:
 If you encounter issues:
 1. Check the browser console for detailed error messages
 2. Verify your API key permissions match the requirements above
-3. Test your credentials using the BingX API Management page
-4. Ensure your system time is synchronized with BingX servers 
+3. Test your credentials using the Bybit API Management page
+4. Ensure your system time is synchronized with Bybit servers 

@@ -1,35 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 
-interface BingXBalanceResponse {
-  asset: string;
-  balance: string;
-  equity?: string;
-  unrealizedProfit?: string;
-  realisedProfit?: string;
-  availableMargin?: string;
-  usedMargin?: string;
-  freezedMargin?: string;
-  availableBalance?: string;
-  lockedBalance?: string;
-  free?: string;
-  locked?: string;
-}
+// Removed unused interface
 
-interface BingXPriceResponse {
+interface BybitPriceResponse {
   symbol: string;
   price: string;
 }
 import { calculatePnlData } from '../../lib/pnl-calculator';
 
-interface BingXBalance {
+interface BybitBalance {
   asset: string;
   free: string;
   locked: string;
 }
 
-interface BingXAccountInfo {
-  balances: BingXBalance[];
+interface BybitAccountInfo {
+  balances: BybitBalance[];
 }
 
 
@@ -44,91 +31,89 @@ interface WalletBalance {
   pnlPercentage?: number;
 }
 
-// Helper function to create BingX API signature
-function createBingXSignature(params: string, secretKey: string): string {
+// Helper function to create Bybit API signature
+function createBybitSignature(params: string, secretKey: string): string {
   return crypto
     .createHmac('sha256', secretKey)
     .update(params)
     .digest('hex');
 }
 
-// Helper function to make BingX Futures API request
-async function makeBingXFuturesRequest(endpoint: string, apiKey: string, secretKey: string, params: Record<string, string> = {}) {
+// Helper function to make Bybit Futures API request
+async function makeBybitFuturesRequest(endpoint: string, apiKey: string, secretKey: string, params: Record<string, string> = {}) {
   const timestamp = Date.now().toString();
-  const queryString = Object.entries({ ...params, timestamp })
+  const recvWindow = '5000';
+  const queryString = Object.entries(params)
     .map(([key, value]) => `${key}=${value}`)
     .join('&');
   
-  const signature = createBingXSignature(queryString, secretKey);
-  const url = `https://open-api.bingx.com${endpoint}?${queryString}&signature=${signature}`;
+  // Bybit V5 signature format: timestamp + apiKey + recvWindow + queryString
+  const signaturePayload = timestamp + apiKey + recvWindow + queryString;
+  const signature = createBybitSignature(signaturePayload, secretKey);
   
-  console.log('🌐 Making BingX Futures API request to:', url);
+  const url = queryString ? 
+    `https://api.bybit.com${endpoint}?${queryString}` : 
+    `https://api.bybit.com${endpoint}`;
+  
+  console.log('🌐 Making Bybit Futures API request to:', url);
+  console.log('🔐 Signature payload:', signaturePayload);
   
   const response = await fetch(url, {
-    method: 'GET', // Futures balance endpoint should be GET
+    method: 'GET',
     headers: {
-      'X-BX-APIKEY': apiKey,
+      'X-BAPI-API-KEY': apiKey,
+      'X-BAPI-SIGN': signature,
+      'X-BAPI-SIGN-TYPE': '2',
+      'X-BAPI-TIMESTAMP': timestamp,
+      'X-BAPI-RECV-WINDOW': recvWindow,
       'Content-Type': 'application/json',
     },
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('❌ BingX Futures API Error:', response.status, errorText);
-    throw new Error(`BingX Futures API Error ${response.status}: ${errorText}`);
+    console.error('❌ Bybit Futures API Error:', response.status, errorText);
+    throw new Error(`Bybit Futures API Error ${response.status}: ${errorText}`);
   }
 
   return response.json();
 }
 
-// Helper function to get futures account info from BingX
-async function getBingXFuturesAccountInfo(apiKey: string, secretKey: string): Promise<BingXAccountInfo> {
-  console.log('🔍 Fetching futures balance from BingX...');
+// Helper function to get futures account info from Bybit
+async function getBybitFuturesAccountInfo(apiKey: string, secretKey: string): Promise<BybitAccountInfo> {
+  console.log('🔍 Fetching futures balance from Bybit...');
   
   try {
-    const response = await makeBingXFuturesRequest('/openApi/swap/v2/user/balance', apiKey, secretKey);
+    const response = await makeBybitFuturesRequest('/v5/account/wallet-balance', apiKey, secretKey, { accountType: 'UNIFIED' });
     
-    console.log('📊 BingX Futures Balance Response:', JSON.stringify(response, null, 2));
+    console.log('📊 Bybit Futures Balance Response:', JSON.stringify(response, null, 2));
     
-    // Try different possible response structures
-    let balances: Array<{
+    // Parse Bybit V5 API response structure
+    const balances: Array<{
       asset: string;
       free: string;
       locked: string;
     }> = [];
     
-    // Structure 1: response.data.balance (single balance object)
-    if (response.data?.balance) {
-      const balance = response.data.balance as BingXBalanceResponse;
-      balances = [{
-        asset: balance.asset,
-        free: balance.balance || balance.availableBalance || '0',
-        locked: balance.lockedBalance || balance.locked || '0'
-      }];
-    }
-    // Structure 2: response.data.assets (array of assets)
-    else if (response.data?.assets) {
-      balances = response.data.assets.map((balance: BingXBalanceResponse) => ({
-        asset: balance.asset,
-        free: balance.availableBalance || balance.free || '0',
-        locked: balance.lockedBalance || balance.locked || '0'
-      }));
-    }
-    // Structure 3: response.balances
-    else if (response.balances) {
-      balances = response.balances.map((balance: BingXBalanceResponse) => ({
-        asset: balance.asset,
-        free: balance.free || '0',
-        locked: balance.locked || '0'
-      }));
-    }
-    // Structure 4: direct array
-    else if (Array.isArray(response)) {
-      balances = response.map((balance: BingXBalanceResponse) => ({
-        asset: balance.asset,
-        free: balance.free || balance.availableBalance || '0',
-        locked: balance.locked || balance.lockedBalance || '0'
-      }));
+    // Bybit V5 response structure: response.result.list[].coin[].walletBalance
+    if (response.result?.list && Array.isArray(response.result.list)) {
+      for (const account of response.result.list) {
+        if (account.coin && Array.isArray(account.coin)) {
+          for (const coin of account.coin) {
+            const freeAmount = coin.availableToWithdraw || coin.walletBalance || '0';
+            const lockedAmount = coin.locked || '0';
+            
+            // Only include coins with non-zero balance
+            if (parseFloat(freeAmount) > 0 || parseFloat(lockedAmount) > 0) {
+              balances.push({
+                asset: coin.coin,
+                free: freeAmount,
+                locked: lockedAmount
+              });
+            }
+          }
+        }
+      }
     }
     
     console.log('🔄 Transformed balances:', balances);
@@ -140,22 +125,41 @@ async function getBingXFuturesAccountInfo(apiKey: string, secretKey: string): Pr
     
     // Fallback to spot balance if futures fails
     try {
-      const spotResponse = await fetch(`https://open-api.bingx.com/openApi/spot/v1/account?timestamp=${Date.now()}`, {
+      const spotResponse = await fetch(`https://api.bybit.com/v5/account/wallet-balance?accountType=SPOT&timestamp=${Date.now()}`, {
         method: 'GET',
         headers: {
-          'X-BX-APIKEY': apiKey,
+          'X-BAPI-API-KEY': apiKey,
         },
       });
       
       if (spotResponse.ok) {
         const spotData = await spotResponse.json();
-        console.log('📊 BingX Spot Balance Response (fallback):', JSON.stringify(spotData, null, 2));
+        console.log('📊 Bybit Spot Balance Response (fallback):', JSON.stringify(spotData, null, 2));
         
-        const balances = spotData.balances?.map((balance: BingXBalanceResponse) => ({
-          asset: balance.asset,
-          free: balance.free || '0',
-          locked: balance.locked || '0'
-        })) || [];
+        const balances: Array<{
+          asset: string;
+          free: string;
+          locked: string;
+        }> = [];
+        
+        if (spotData.result?.list && Array.isArray(spotData.result.list)) {
+          for (const account of spotData.result.list) {
+            if (account.coin && Array.isArray(account.coin)) {
+              for (const coin of account.coin) {
+                const freeAmount = coin.availableToWithdraw || coin.walletBalance || '0';
+                const lockedAmount = coin.locked || '0';
+                
+                if (parseFloat(freeAmount) > 0 || parseFloat(lockedAmount) > 0) {
+                  balances.push({
+                    asset: coin.coin,
+                    free: freeAmount,
+                    locked: lockedAmount
+                  });
+                }
+              }
+            }
+          }
+        }
         
         console.log('🔄 Transformed spot balances (fallback):', balances);
         return { balances };
@@ -168,9 +172,9 @@ async function getBingXFuturesAccountInfo(apiKey: string, secretKey: string): Pr
   }
 }
 
-// Helper function to get current futures prices from BingX
-async function getBingXFuturesPrices(): Promise<Record<string, string>> {
-  const response = await fetch('https://open-api.bingx.com/openApi/swap/v2/quote/price');
+// Helper function to get current futures prices from Bybit
+async function getBybitFuturesPrices(): Promise<Record<string, string>> {
+  const response = await fetch('https://api.bybit.com/v5/market/tickers?category=linear');
   
   if (!response.ok) {
     throw new Error(`Failed to fetch futures prices: ${response.status}`);
@@ -180,8 +184,8 @@ async function getBingXFuturesPrices(): Promise<Record<string, string>> {
   
   // Transform to match expected format
   const prices: Record<string, string> = {};
-  if (data.data) {
-    data.data.forEach((item: BingXPriceResponse) => {
+  if (data.result?.list && Array.isArray(data.result.list)) {
+    data.result.list.forEach((item: BybitPriceResponse) => {
       prices[item.symbol] = item.price;
     });
   }
@@ -202,8 +206,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get current prices from BingX
-    const tickerPrices = await getBingXFuturesPrices();
+    // Get current prices from Bybit
+    const tickerPrices = await getBybitFuturesPrices();
     
     // Calculate USD values and total balance
     let totalBalance = 0;
@@ -212,12 +216,12 @@ export async function POST(request: NextRequest) {
       futures: []
     };
 
-    // Get Futures wallet balances from BingX
-    const accountInfo: BingXAccountInfo = await getBingXFuturesAccountInfo(apiKey, secretKey);
+    // Get Futures wallet balances from Bybit
+    const accountInfo: BybitAccountInfo = await getBybitFuturesAccountInfo(apiKey, secretKey);
     console.log('📈 Raw account info:', accountInfo);
     
     const futuresBalances = accountInfo.balances.filter(
-      (balance: BingXBalance) => parseFloat(balance.free) > 0 || parseFloat(balance.locked) > 0
+      (balance: BybitBalance) => parseFloat(balance.free) > 0 || parseFloat(balance.locked) > 0
     );
     
     console.log('💰 Filtered futures balances with non-zero amounts:', futuresBalances);
@@ -281,7 +285,7 @@ export async function POST(request: NextRequest) {
       balances,
       totalBalance,
       walletBalances,
-      futuresBalances: futuresBalances.map((balance: BingXBalance) => ({
+      futuresBalances: futuresBalances.map((balance: BybitBalance) => ({
         asset: balance.asset,
         free: balance.free,
         locked: balance.locked
@@ -295,7 +299,7 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     console.error('Error fetching balances:', error);
     
-    let errorMessage = 'Failed to fetch futures balances from BingX';
+    let errorMessage = 'Failed to fetch futures balances from Bybit';
     let statusCode = 500;
     let errorCode: number | undefined;
 
@@ -314,7 +318,7 @@ export async function POST(request: NextRequest) {
           statusCode = 401;
           break;
         case -2011:
-          errorMessage = 'API key does not have the required permissions. Please check your API key permissions in BingX.';
+          errorMessage = 'API key does not have the required permissions. Please check your API key permissions in Bybit.';
           statusCode = 401;
           break;
         case -1001:

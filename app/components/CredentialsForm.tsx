@@ -2,10 +2,10 @@
 
 import { useState } from 'react';
 import { Eye, EyeOff, Key, Shield } from 'lucide-react';
-import { BingXCredentials } from '../types';
+import { BybitCredentials } from '../types';
 
 interface CredentialsFormProps {
-  onSave: (credentials: BingXCredentials) => void;
+  onSave: (credentials: BybitCredentials) => void;
 }
 
 export default function CredentialsForm({ onSave }: CredentialsFormProps) {
@@ -68,7 +68,7 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-            placeholder="Enter your BingX API Key"
+            placeholder="Enter your Bybit API Key"
             required
           />
         </div>
@@ -86,7 +86,7 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
             value={secretKey}
             onChange={(e) => setSecretKey(e.target.value)}
             className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-            placeholder="Enter your BingX Secret Key"
+            placeholder="Enter your Bybit Secret Key"
             required
           />
           <button
@@ -127,7 +127,7 @@ export default function CredentialsForm({ onSave }: CredentialsFormProps) {
         disabled={isLoading || !apiKey.trim() || !secretKey.trim()}
         className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
-        {isLoading ? 'Testing Credentials...' : 'Connect to BingX'}
+        {isLoading ? 'Testing Credentials...' : 'Connect to Bybit'}
       </button>
     </form>
   );

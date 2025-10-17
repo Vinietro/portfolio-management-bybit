@@ -152,7 +152,7 @@ All endpoints return a consistent response format:
 - **Telegram Alerts**: Automatic notifications for all actions
 - **Error Handling**: Continues processing other users if one fails
 - **Position Detection**: Automatically finds and closes existing positions
-- **Futures Trading**: All trades use 1x leverage on BingX futures
+- **Futures Trading**: All trades **automatically use 1x leverage** on Bybit futures (enforced by the system)
 
 ## Error Handling
 

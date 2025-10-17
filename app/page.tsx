@@ -5,11 +5,11 @@ import { Wallet, Settings, AlertCircle } from 'lucide-react';
 import CredentialsForm from './components/CredentialsForm';
 import PortfolioTable from './components/PortfolioTable';
 import CoinListTable from './components/CoinListTable';
-import { BingXCredentials, PortfolioItem } from './types';
+import { BybitCredentials, PortfolioItem } from './types';
 import { SyncManager } from './lib/sync';
 
 export default function Home() {
-  const [credentials, setCredentials] = useState<BingXCredentials | null>(null);
+  const [credentials, setCredentials] = useState<BybitCredentials | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -18,7 +18,7 @@ export default function Home() {
 
   useEffect(() => {
     // Load credentials from localStorage
-    const savedCredentials = localStorage.getItem('bingxCredentials');
+    const savedCredentials = localStorage.getItem('bybitCredentials');
     
     if (savedCredentials) {
       const parsedCredentials = JSON.parse(savedCredentials);
@@ -60,10 +60,10 @@ export default function Home() {
   };
 
 
-  const handleCredentialsSave = async (creds: BingXCredentials) => {
+  const handleCredentialsSave = async (creds: BybitCredentials) => {
     // Save to localStorage first  
     setCredentials(creds);
-    localStorage.setItem('bingxCredentials', JSON.stringify(creds));
+    localStorage.setItem('bybitCredentials', JSON.stringify(creds));
     setError(null);
     
     // Save to database in background (non-blocking)
@@ -93,7 +93,7 @@ export default function Home() {
 
   const handleDisconnect = () => {
     setCredentials(null);
-    localStorage.removeItem('bingxCredentials');
+    localStorage.removeItem('bybitCredentials');
     setError(null);
   };
 
@@ -124,7 +124,7 @@ export default function Home() {
               <div className="flex items-center gap-3 mb-6">
                 <Settings className="h-6 w-6 text-blue-600" />
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                  BingX API Setup
+                  Bybit API Setup
                 </h2>
               </div>
               <CredentialsForm onSave={handleCredentialsSave} />
@@ -139,7 +139,7 @@ export default function Home() {
                   Portfolio Overview
                 </h2>
                 <div className="text-sm text-gray-500 dark:text-gray-400">
-                  Connected to BingX
+                  Connected to Bybit
                 </div>
               </div>
               <PortfolioTable

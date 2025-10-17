@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { DollarSign, LogOut } from 'lucide-react';
-import { PortfolioItem, BingXCredentials } from '../types';
+import { PortfolioItem, BybitCredentials } from '../types';
 
 interface CoinListTableProps {
-  credentials: BingXCredentials;
+  credentials: BybitCredentials;
   portfolio: PortfolioItem[];
   setIsLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
@@ -91,7 +91,7 @@ export default function CoinListTable({
       }
 
       // Clear local storage
-      localStorage.removeItem('bingxCredentials');
+      localStorage.removeItem('bybitCredentials');
       
       // Call the disconnect callback if provided
       if (onDisconnect) {

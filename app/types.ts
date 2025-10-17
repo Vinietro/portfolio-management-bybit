@@ -1,4 +1,4 @@
-export interface BingXCredentials {
+export interface BybitCredentials {
   apiKey: string;
   secretKey: string;
 }
@@ -16,7 +16,7 @@ export interface PortfolioItem {
   positionStatus?: 'open' | 'closed' | 'unknown';
 }
 
-export interface BingXBalance {
+export interface BybitBalance {
   asset: string;
   free: string;
   locked: string;

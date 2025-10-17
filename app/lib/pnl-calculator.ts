@@ -12,31 +12,41 @@ interface Trade {
 
 
 
-// Helper function to create BingX signature
-function createBingXSignature(params: string, secretKey: string): string {
+// Helper function to create Bybit signature
+function createBybitSignature(params: string, secretKey: string): string {
   return crypto.createHmac('sha256', secretKey).update(params).digest('hex');
 }
 
-// Helper function to make BingX API request
-async function makeBingXRequest(endpoint: string, apiKey: string, secretKey: string, params: Record<string, string> = {}) {
+// Helper function to make Bybit API request
+async function makeBybitRequest(endpoint: string, apiKey: string, secretKey: string, params: Record<string, string> = {}) {
   const timestamp = Date.now().toString();
-  const queryString = Object.entries({ ...params, timestamp })
+  const recvWindow = '5000';
+  const queryString = Object.entries(params)
     .map(([key, value]) => `${key}=${value}`)
     .join('&');
   
-  const signature = createBingXSignature(queryString, secretKey);
-  const url = `https://open-api.bingx.com${endpoint}?${queryString}&signature=${signature}`;
+  // Bybit V5 signature format: timestamp + apiKey + recvWindow + queryString
+  const signaturePayload = timestamp + apiKey + recvWindow + queryString;
+  const signature = createBybitSignature(signaturePayload, secretKey);
+  
+  const url = queryString ? 
+    `https://api.bybit.com${endpoint}?${queryString}` : 
+    `https://api.bybit.com${endpoint}`;
   
   const response = await fetch(url, {
     headers: {
-      'X-BX-APIKEY': apiKey,
+      'X-BAPI-API-KEY': apiKey,
+      'X-BAPI-SIGN': signature,
+      'X-BAPI-SIGN-TYPE': '2',
+      'X-BAPI-TIMESTAMP': timestamp,
+      'X-BAPI-RECV-WINDOW': recvWindow,
       'Content-Type': 'application/json',
     },
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`BingX API Error ${response.status}: ${errorText}`);
+    throw new Error(`Bybit API Error ${response.status}: ${errorText}`);
   }
 
   return response.json();
@@ -53,18 +63,18 @@ export async function calculatePnlData(apiKey: string, secretKey: string, assets
   }
 
   try {
-    // Get current prices from BingX
-    const tickerResponse = await fetch('https://open-api.bingx.com/openApi/spot/v1/ticker/price');
+    // Get current prices from Bybit
+    const tickerResponse = await fetch('https://api.bybit.com/v5/market/tickers?category=spot');
     if (!tickerResponse.ok) {
-      throw new Error('Failed to fetch prices from BingX');
+      throw new Error('Failed to fetch prices from Bybit');
     }
     const tickerData = await tickerResponse.json();
     
     // Convert to price lookup object
     const tickerPrices: Record<string, string> = {};
-    if (tickerData.data && Array.isArray(tickerData.data)) {
-      tickerData.data.forEach((ticker: { symbol: string; price: string }) => {
-        tickerPrices[ticker.symbol] = ticker.price;
+    if (tickerData.result && tickerData.result.list && Array.isArray(tickerData.result.list)) {
+      tickerData.result.list.forEach((ticker: { symbol: string; lastPrice: string }) => {
+        tickerPrices[ticker.symbol] = ticker.lastPrice;
       });
     }
 
@@ -94,13 +104,14 @@ export async function calculatePnlData(apiKey: string, secretKey: string, assets
       }
 
       try {
-        // Get trading history for this asset from BingX
-        const tradesResponse = await makeBingXRequest('/openApi/spot/v1/trade/history', apiKey, secretKey, {
+        // Get trading history for this asset from Bybit
+        const tradesResponse = await makeBybitRequest('/v5/execution/list', apiKey, secretKey, {
+          category: 'spot',
           symbol: symbol,
           limit: '1000' // Get last 1000 trades
         });
         
-        const trades: Trade[] = tradesResponse.data || [];
+        const trades: Trade[] = tradesResponse.result?.list || [];
 
         if (trades.length === 0) {
           continue;

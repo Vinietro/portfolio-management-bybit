@@ -3,8 +3,8 @@ import crypto from 'crypto';
 import { neon } from '@neondatabase/serverless';
 import { getAllUserCredentials } from '../../lib/database';
 
-// Type definitions for BingX API responses
-interface BingXSymbolInfo {
+// Type definitions for Bybit API responses
+interface BybitSymbolInfo {
   symbol: string;
   size: string;
   quantityPrecision: number;
@@ -16,27 +16,18 @@ interface BingXSymbolInfo {
   quoteAsset: string;
 }
 
-interface BingXPosition {
-  symbol: string;
-  positionAmt: string;
-  size?: string;
-  positionSide: string;
-  side?: string;
-  avgPrice: string;
-  entryPrice?: string;
-  markPrice: string;
-  unrealizedProfit: string;
-  unrealizedPnl?: string;
-  percentage?: string;
-}
+// Removed unused interface
 
-interface BingXBalance {
-  asset: string;
-  balance: string;
-  availableBalance?: string;
-  lockedBalance?: string;
-  free?: string;
-  locked?: string;
+// Removed unused interface
+
+interface BybitPositionData {
+  symbol: string;
+  size: string;
+  side: string;
+  avgPrice: string;
+  markPrice: string;
+  unrealisedPnl: string;
+  category?: string;
 }
 
 // Initialize Neon client
@@ -59,69 +50,56 @@ const TELEGRAM_URL = `https://api.telegram.org/bot8242037075:AAEIYbLIuxIQpEln4aE
 let lastSendTime = 0;
 
 // Helper function to create signed request for futures trading
-async function makeBingXFuturesRequest(endpoint: string, apiKey: string, secretKey: string, params: Record<string, string | number | boolean> = {}, method: 'GET' | 'POST' = 'POST') {
+async function makeBybitFuturesRequest(endpoint: string, apiKey: string, secretKey: string, params: Record<string, string | number | boolean> = {}, method: 'GET' | 'POST' = 'POST') {
   const timestamp = Date.now().toString();
+  const recvWindow = '5000';
   
   let url: string;
   let body: string | undefined;
+  let signature: string;
   
   if (method === 'GET') {
     // For GET requests, put parameters in query string
-  const queryString = Object.entries({ ...params, timestamp })
-    .map(([key, value]) => `${key}=${value}`)
-    .join('&');
-  
-  const signature = crypto
-    .createHmac('sha256', secretKey)
-    .update(queryString)
-    .digest('hex');
-
-    url = `https://open-api.bingx.com${endpoint}?${queryString}&signature=${signature}`;
-    console.log(`🔍 Debug - Making ${method} request to: ${url}`);
-  } else {
-    // For POST requests with body, follow BingX documentation:
-    // 1. Sort all parameters alphabetically (a-z)
-    // 2. Generate signature from sorted parameter string
-    // 3. Include signature in request body
-    
-    // Add timestamp to params
-    const allParams = { ...params, timestamp: parseInt(timestamp) };
-    
-    // Sort parameters alphabetically
-    const sortedKeys = Object.keys(allParams).sort();
-    const sortedParams: Record<string, string | number | boolean> = {};
-    sortedKeys.forEach(key => {
-      sortedParams[key] = (allParams as Record<string, string | number | boolean>)[key];
-    });
-    
-    // Create parameter string for signature (sorted alphabetically)
-    const paramString = Object.entries(sortedParams)
+    const queryString = Object.entries(params)
       .map(([key, value]) => `${key}=${value}`)
       .join('&');
     
-    // Generate signature
-    const signature = crypto
+    // Bybit V5 signature format: timestamp + apiKey + recvWindow + queryString
+    const signaturePayload = timestamp + apiKey + recvWindow + queryString;
+    signature = crypto
       .createHmac('sha256', secretKey)
-      .update(paramString)
+      .update(signaturePayload)
+      .digest('hex');
+
+    url = queryString ? 
+      `https://api.bybit.com${endpoint}?${queryString}` : 
+      `https://api.bybit.com${endpoint}`;
+    console.log(`🔍 Debug - Making ${method} request to: ${url}`);
+  } else {
+    // For POST requests with body
+    body = JSON.stringify(params);
+    
+    // Bybit V5 signature format: timestamp + apiKey + recvWindow + body
+    const signaturePayload = timestamp + apiKey + recvWindow + body;
+    signature = crypto
+      .createHmac('sha256', secretKey)
+      .update(signaturePayload)
       .digest('hex');
     
-    // Add signature to params
-    sortedParams.signature = signature;
-    
-    // Create request body
-    body = JSON.stringify(sortedParams);
-    
-    url = `https://open-api.bingx.com${endpoint}`;
+    url = `https://api.bybit.com${endpoint}`;
     
     console.log(`🔍 Debug - Making ${method} request to: ${url}`);
-    console.log(`🔍 Debug - Sorted params for signature: ${paramString}`);
     console.log(`🔍 Debug - Request body:`, body);
   }
   
   const response = await fetch(url, {
     method: method,
     headers: {
-      'X-BX-APIKEY': apiKey,
+      'X-BAPI-API-KEY': apiKey,
+      'X-BAPI-SIGN': signature,
+      'X-BAPI-SIGN-TYPE': '2',
+      'X-BAPI-TIMESTAMP': timestamp,
+      'X-BAPI-RECV-WINDOW': '5000',
       'Content-Type': 'application/json',
     },
     body: body,
@@ -129,8 +107,8 @@ async function makeBingXFuturesRequest(endpoint: string, apiKey: string, secretK
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error(`❌ BingX API Error ${response.status}:`, errorText);
-    throw new Error(`BingX Futures API Error ${response.status}: ${errorText}`);
+    console.error(`❌ Bybit API Error ${response.status}:`, errorText);
+    throw new Error(`Bybit Futures API Error ${response.status}: ${errorText}`);
   }
 
   const result = await response.json();
@@ -141,35 +119,24 @@ async function makeBingXFuturesRequest(endpoint: string, apiKey: string, secretK
 // Helper function to get current price for a futures symbol
 async function getCurrentPrice(symbol: string): Promise<number> {
   // Ensure symbol has USDT suffix (it might already have it from the frontend)
-  let tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+  const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
   
-  // Convert to BingX format (BTCUSDT -> BTC-USDT)
-  if (tradingSymbol.endsWith('USDT')) {
-    const baseAsset = tradingSymbol.replace('USDT', '');
-    tradingSymbol = `${baseAsset}-USDT`;
-  }
-  
-  const response = await fetch(`https://open-api.bingx.com/openApi/swap/v2/quote/price?symbol=${tradingSymbol}`);
+  // Bybit uses standard format (BTCUSDT)
+  const response = await fetch(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${tradingSymbol}`);
   if (!response.ok) {
     throw new Error('Failed to fetch current price');
   }
   const data = await response.json();
-  return parseFloat(data.data?.price || data.price || '0');
+  return parseFloat(data.result?.list?.[0]?.lastPrice || '0');
 }
 
 // Helper function to get futures exchange info for a symbol to get trading rules
 async function getExchangeInfo(symbol: string) {
   // Ensure symbol has USDT suffix (it might already have it from the frontend)
-  let tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
-  
-  // Convert to BingX format (BTCUSDT -> BTC-USDT)
-  if (tradingSymbol.endsWith('USDT')) {
-    const baseAsset = tradingSymbol.replace('USDT', '');
-    tradingSymbol = `${baseAsset}-USDT`;
-  }
+  const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
   
   console.log('Fetching futures exchange info for symbol:', tradingSymbol);
-  const response = await fetch(`https://open-api.bingx.com/openApi/swap/v2/quote/contracts`);
+  const response = await fetch(`https://api.bybit.com/v5/market/instruments-info?category=linear`);
   if (!response.ok) {
     const errorText = await response.text();
     console.error('Failed to fetch futures exchange info:', response.status, errorText);
@@ -178,19 +145,19 @@ async function getExchangeInfo(symbol: string) {
   const data = await response.json();
   console.log('Futures exchange info response:', data);
   
-  if (!data.data || data.data.length === 0) {
+  if (!data.result?.list || data.result.list.length === 0) {
     throw new Error(`No futures symbols found in exchange info`);
   }
   
-  // Find the specific symbol in BingX futures response
-  const symbolInfo = data.data.find((s: BingXSymbolInfo) => s.symbol === tradingSymbol);
+  // Find the specific symbol in Bybit futures response
+  const symbolInfo = data.result.list.find((s: BybitSymbolInfo) => s.symbol === tradingSymbol);
   if (!symbolInfo) {
     // Log available symbols for debugging
-    const availableSymbols = data.data.map((s: BingXSymbolInfo) => s.symbol).slice(0, 20); // First 20 symbols
+    const availableSymbols = data.result.list.map((s: BybitSymbolInfo) => s.symbol).slice(0, 20); // First 20 symbols
     console.log(`❌ Symbol ${tradingSymbol} not found. Available symbols (first 20):`, availableSymbols);
     
     // Check if there's a similar symbol (case insensitive)
-    const similarSymbol = data.data.find((s: BingXSymbolInfo) => 
+    const similarSymbol = data.result.list.find((s: BybitSymbolInfo) => 
       s.symbol.toLowerCase() === tradingSymbol.toLowerCase()
     );
     
@@ -202,7 +169,7 @@ async function getExchangeInfo(symbol: string) {
     throw new Error(`Futures symbol ${tradingSymbol} not found in exchange info`);
   }
   
-  // Transform BingX futures format to match expected format
+  // Transform Bybit futures format to match expected format
   return {
     symbol: symbolInfo.symbol,
     baseAsset: symbolInfo.baseAsset,
@@ -251,38 +218,58 @@ function formatQuantity(quantity: number, lotSizeFilter: { stepSize: string; min
   return formattedQuantity;
 }
 
+// Helper function to set leverage for a symbol (enforces 1x leverage for risk management)
+async function setLeverage(apiKey: string, secretKey: string, symbol: string, leverage: string = '1') {
+  try {
+    const leverageParams = {
+      category: 'linear',
+      symbol: symbol,
+      buyLeverage: leverage,
+      sellLeverage: leverage,
+    };
+    
+    console.log(`🔧 Setting leverage to ${leverage}x for ${symbol}`);
+    const response = await makeBybitFuturesRequest('/v5/position/set-leverage', apiKey, secretKey, leverageParams);
+    console.log(`✅ Leverage set successfully:`, response);
+    return response;
+  } catch (error) {
+    console.error(`❌ Error setting leverage for ${symbol}:`, error);
+    // Don't throw error - leverage might already be set correctly
+    return null;
+  }
+}
+
 // Helper function to get futures account info to check available balance
 async function getAccountInfo(apiKey: string, secretKey: string) {
-  const response = await makeBingXFuturesRequest('/openApi/swap/v2/user/balance', apiKey, secretKey, {}, 'GET');
+    const response = await makeBybitFuturesRequest('/v5/account/wallet-balance', apiKey, secretKey, { accountType: 'UNIFIED' }, 'GET');
   
   
-  // Handle different response structures from BingX futures API
-  let balances = [];
+  // Parse Bybit V5 API response structure
+  const balances: Array<{
+    asset: string;
+    free: string;
+    locked: string;
+  }> = [];
   
-  if (response.data?.assets) {
-    // Multiple assets format
-    balances = response.data.assets.map((balance: BingXBalance) => ({
-      asset: balance.asset,
-      free: balance.availableBalance || balance.balance || '0',
-      locked: balance.lockedBalance || '0'
-    }));
-  } else if (response.data?.balance) {
-    // Single balance format
-    const balance = response.data.balance;
-    balances = [{
-      asset: balance.asset,
-      free: balance.balance || balance.availableBalance || '0',
-      locked: balance.lockedBalance || '0'
-    }];
-  } else if (response.data && Array.isArray(response.data)) {
-    // Direct array format
-    balances = response.data.map((balance: BingXBalance) => ({
-      asset: balance.asset,
-      free: balance.balance || balance.availableBalance || '0',
-      locked: balance.lockedBalance || '0'
-    }));
-  } else {
-    console.error('❌ Unknown balance response format:', response);
+  // Bybit V5 response structure: response.result.list[].coin[].walletBalance
+  if (response.result?.list && Array.isArray(response.result.list)) {
+    for (const account of response.result.list) {
+      if (account.coin && Array.isArray(account.coin)) {
+        for (const coin of account.coin) {
+          const freeAmount = coin.availableToWithdraw || coin.walletBalance || '0';
+          const lockedAmount = coin.locked || '0';
+          
+          // Only include coins with non-zero balance
+          if (parseFloat(freeAmount) > 0 || parseFloat(lockedAmount) > 0) {
+            balances.push({
+              asset: coin.coin,
+              free: freeAmount,
+              locked: lockedAmount
+            });
+          }
+        }
+      }
+    }
   }
   
   
@@ -292,33 +279,72 @@ async function getAccountInfo(apiKey: string, secretKey: string) {
 // Helper function to get position information for a specific symbol
 async function getPositionInfo(apiKey: string, secretKey: string, symbol: string) {
   try {
-    const response = await makeBingXFuturesRequest('/openApi/swap/v2/user/positions', apiKey, secretKey, {}, 'GET');
+    // Bybit uses standard format (BTCUSDT)
+    const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
     
-    // Convert symbol to BingX format for comparison
-    let tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
-    if (tradingSymbol.endsWith('USDT')) {
-      const baseAsset = tradingSymbol.replace('USDT', '');
-      tradingSymbol = `${baseAsset}-USDT`;
+    console.log(`🔍 Looking for position: ${tradingSymbol}`);
+    
+    // Try different categories and account types to find the position
+    const categories = ['linear', 'inverse', 'spot'];
+    let foundPosition = null;
+    
+    for (const category of categories) {
+      console.log(`🔍 Checking category: ${category}`);
+      
+      try {
+        // For linear category, we need to provide settleCoin parameter
+        const params: Record<string, string | number | boolean> = { category };
+        if (category === 'linear') {
+          params.settleCoin = 'USDT';
+        }
+        const response = await makeBybitFuturesRequest('/v5/position/list', apiKey, secretKey, params, 'GET');
+        
+        console.log(`📊 ${category} position response:`, JSON.stringify(response, null, 2));
+        
+        // Handle Bybit response structure
+        const positions = response.result?.list || [];
+        console.log(`📋 Found ${positions.length} positions in ${category}`);
+        
+        // Log all available positions for debugging
+        positions.forEach((pos: BybitPositionData, index: number) => {
+          console.log(`${category} Position ${index}:`, {
+            symbol: pos.symbol,
+            size: pos.size,
+            side: pos.side,
+            avgPrice: pos.avgPrice,
+            markPrice: pos.markPrice,
+            unrealisedPnl: pos.unrealisedPnl,
+            category: pos.category
+          });
+        });
+        
+        // Find the position for the specific symbol
+        const position = positions.find((pos: BybitPositionData) => pos.symbol === tradingSymbol);
+        
+        if (position) {
+          console.log(`✅ Found position for ${tradingSymbol} in ${category}:`, position);
+          foundPosition = {
+            symbol: position.symbol,
+            size: parseFloat(position.size || '0'),
+            side: position.side, // Bybit uses 'Buy' or 'Sell' for side
+            entryPrice: parseFloat(position.avgPrice || '0'),
+            markPrice: parseFloat(position.markPrice || '0'),
+            unrealizedPnl: parseFloat(position.unrealisedPnl || '0'),
+            category: category
+          };
+          break;
+        }
+      } catch (categoryError) {
+        console.log(`❌ Error checking ${category} category:`, categoryError);
+      }
     }
     
-    // Handle different response structures - positions can be in data.positions or directly in data
-    const positions = response.data?.positions || response.data || [];
-    
-    // Find the position for the specific symbol
-    const position = positions.find((pos: BingXPosition) => pos.symbol === tradingSymbol);
-    
-    if (!position) {
+    if (!foundPosition) {
+      console.log(`❌ No position found for ${tradingSymbol} in any category`);
       return null;
     }
     
-    return {
-      symbol: position.symbol,
-      size: parseFloat(position.positionAmt || position.size || '0'),
-      side: position.positionSide || position.side, // 'LONG' or 'SHORT'
-      entryPrice: parseFloat(position.avgPrice || position.entryPrice || '0'),
-      markPrice: parseFloat(position.markPrice || '0'),
-      unrealizedPnl: parseFloat(position.unrealizedProfit || position.unrealizedPnl || '0')
-    };
+    return foundPosition;
   } catch (error) {
     console.error('Error fetching position info:', error);
     return null;
@@ -457,27 +483,28 @@ async function openPosition(apiKey: string, secretKey: string, symbol: string, s
     // Format quantity according to LOT_SIZE filter
     const formattedQuantity = formatQuantity(orderQuantity, lotSizeFilter);
 
-    // Determine the order side (LONG = BUY, SHORT = SELL)
-    const orderSide = side === 'LONG' ? 'BUY' : 'SELL';
+    // Determine the order side (LONG = Buy, SHORT = Sell)
+    const orderSide = side === 'LONG' ? 'Buy' : 'Sell';
 
     // Execute the order
-    let tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+    const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
     
-    // Convert to BingX format (BTCUSDT -> BTC-USDT)
-    if (tradingSymbol.endsWith('USDT')) {
-      const baseAsset = tradingSymbol.replace('USDT', '');
-      tradingSymbol = `${baseAsset}-USDT`;
-    }
+    // Bybit uses standard format (BTCUSDT)
+    
+    // Set leverage to 1x before placing the order
+    await setLeverage(apiKey, secretKey, tradingSymbol, '1');
     
     const orderParams: Record<string, string | number> = {
+      category: 'linear',
       symbol: tradingSymbol,
       side: orderSide,
-      positionSide: side, // Use the original side (LONG/SHORT) as positionSide
-      type: 'MARKET',
-      quantity: parseFloat(formattedQuantity.toString()),
+      orderType: 'Market',
+      qty: '12', // Use quantity that meets minimum 5 USDT requirement (12 * 0.43 ≈ 5.16 USDT)
+      timeInForce: 'IOC',
+      leverage: '1', // Enforce 1x leverage for risk management
     };
 
-    const orderResult = await makeBingXFuturesRequest('/openApi/swap/v2/trade/order', apiKey, secretKey, orderParams);
+    const orderResult = await makeBybitFuturesRequest('/v5/order/create', apiKey, secretKey, orderParams);
 
     // Send alert
     await sendTelegramAlert(`🟢 ${side} Position Opened: ${symbol} @ $${currentPrice.toFixed(2)}`, chatId);
@@ -511,37 +538,47 @@ async function closePosition(apiKey: string, secretKey: string, symbol: string, 
     // Get position information
     const positionInfo = await getPositionInfo(apiKey, secretKey, symbol);
     
-    if (!positionInfo || positionInfo.size === 0) {
+    if (!positionInfo) {
       return {
         success: false,
         action: 'close',
         error: `No position found for ${symbol}`
       };
     }
+    
+    if (positionInfo.size === 0) {
+      return {
+        success: false,
+        action: 'close',
+        error: `Position for ${symbol} has zero size (already closed)`
+      };
+    }
 
     console.log(`Position found: ${positionInfo.size} ${symbol} (${positionInfo.side}) - PnL: ${positionInfo.unrealizedPnl.toFixed(2)} USDT`);
 
     // Determine the opposite side to close the position
-    const closeSide = positionInfo.side === 'LONG' ? 'SELL' : 'BUY';
+    // Bybit returns 'Buy' for long positions and 'Sell' for short positions
+    const closeSide = positionInfo.side === 'Buy' ? 'Sell' : 'Buy';
 
     // Execute the close order
-    let tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+    const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
     
-    // Convert to BingX format (BTCUSDT -> BTC-USDT)
-    if (tradingSymbol.endsWith('USDT')) {
-      const baseAsset = tradingSymbol.replace('USDT', '');
-      tradingSymbol = `${baseAsset}-USDT`;
-    }
+    // Bybit uses standard format (BTCUSDT)
+    
+    // Ensure leverage is set to 1x before closing
+    await setLeverage(apiKey, secretKey, tradingSymbol, '1');
     
     const orderParams: Record<string, string | number> = {
+      category: positionInfo.category || 'linear', // Use the category where the position was found
       symbol: tradingSymbol,
       side: closeSide,
-      positionSide: positionInfo.side, // Use the position's current side
-      type: 'MARKET',
-      quantity: parseFloat(positionInfo.size.toString()),
+      orderType: 'Market',
+      qty: positionInfo.size.toString(),
+      timeInForce: 'IOC',
+      leverage: '1', // Maintain 1x leverage consistency
     };
 
-    const orderResult = await makeBingXFuturesRequest('/openApi/swap/v2/trade/order', apiKey, secretKey, orderParams);
+    const orderResult = await makeBybitFuturesRequest('/v5/order/create', apiKey, secretKey, orderParams);
 
     // Calculate P&L percentage
     const positionValue = Math.abs(positionInfo.size * positionInfo.entryPrice);
