@@ -114,9 +114,14 @@ export default function CoinListTable({
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <DollarSign className="h-6 w-6 text-green-600" />
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Portfolio Allocation
-          </h2>
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              Portfolio Allocation
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Including futures positions (HYPE, BTC, ETH, etc.)
+            </p>
+          </div>
         </div>
         <button
           onClick={handleDisconnect}

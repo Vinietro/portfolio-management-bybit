@@ -193,6 +193,49 @@ async function getBybitFuturesPrices(): Promise<Record<string, string>> {
   return prices;
 }
 
+// Helper function to get futures positions from Bybit
+async function getBybitFuturesPositions(apiKey: string, secretKey: string): Promise<Record<string, number>> {
+  console.log('🔍 Fetching futures positions from Bybit...');
+  
+  try {
+    // Get linear futures positions
+    const response = await makeBybitFuturesRequest('/v5/position/list', apiKey, secretKey, { 
+      category: 'linear',
+      settleCoin: 'USDT'
+    });
+    
+    console.log('📊 Bybit Futures Positions Response:', JSON.stringify(response, null, 2));
+    
+    const positions: Record<string, number> = {};
+    
+    // Parse Bybit V5 API response structure
+    if (response.result?.list && Array.isArray(response.result.list)) {
+      for (const position of response.result.list) {
+        const size = parseFloat(position.size || '0');
+        const markPrice = parseFloat(position.markPrice || '0');
+        const positionValue = Math.abs(size * markPrice);
+        
+        // Only include positions with non-zero size
+        if (positionValue > 0) {
+          // Extract base asset from symbol (e.g., HYPEUSDT -> HYPE)
+          const symbol = position.symbol;
+          const baseAsset = symbol.replace('USDT', '');
+          
+          positions[baseAsset] = positionValue;
+          console.log(`📈 Position: ${symbol} (${baseAsset}) = ${positionValue} USD`);
+        }
+      }
+    }
+    
+    console.log('🔄 Transformed positions:', positions);
+    return positions;
+    
+  } catch (error) {
+    console.error('❌ Error fetching futures positions:', error);
+    return {};
+  }
+}
+
 
 
 export async function POST(request: NextRequest) {
@@ -208,6 +251,9 @@ export async function POST(request: NextRequest) {
 
     // Get current prices from Bybit
     const tickerPrices = await getBybitFuturesPrices();
+    
+    // Get futures positions from Bybit
+    const futuresPositions = await getBybitFuturesPositions(apiKey, secretKey);
     
     // Calculate USD values and total balance
     let totalBalance = 0;
@@ -279,6 +325,16 @@ export async function POST(request: NextRequest) {
           pnlPercentage: pnlInfo?.pnlPercentage
         });
       }
+    }
+
+    // Add futures positions to balances (this is the key addition for futures data)
+    console.log('🎯 Adding futures positions to balances:', futuresPositions);
+    for (const [asset, positionValue] of Object.entries(futuresPositions)) {
+      // Add position value to balances
+      balances[asset] = (balances[asset] || 0) + positionValue;
+      totalBalance += positionValue;
+      
+      console.log(`📊 Added futures position: ${asset} = ${positionValue} USD (Total: ${totalBalance} USD)`);
     }
 
     const response = {

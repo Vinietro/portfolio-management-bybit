@@ -111,6 +111,8 @@ export default function PortfolioTable({
           // CURRENT PERCENT: Relative to available for allocation
           const currentPercent = availableBalanceForCalculation > 0 ? (currentAmount / availableBalanceForCalculation) * 100 : 0;
           const difference = targetAmount - currentAmount;
+          
+          console.log(`💰 ${item.coin} (${coinAssetName}): Current=${currentAmount}, Target=${targetAmount}, Percent=${currentPercent.toFixed(2)}%`);
 
           // Get PNL from trading transactions (database history) 
           let pnl = 0;
@@ -463,6 +465,9 @@ export default function PortfolioTable({
             {getTotalTargetPercent() !== 100 && (
               <span className="ml-2 text-xs text-red-500">(Must equal 100%)</span>
             )}
+          </div>
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            📊 Futures positions: <span className="font-semibold text-purple-600">Included in allocation</span>
           </div>
         </div>
       </div>
