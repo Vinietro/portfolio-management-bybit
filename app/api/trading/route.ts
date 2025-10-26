@@ -499,7 +499,7 @@ async function openPosition(apiKey: string, secretKey: string, symbol: string, s
       symbol: tradingSymbol,
       side: orderSide,
       orderType: 'Market',
-      qty: '12', // Use quantity that meets minimum 5 USDT requirement (12 * 0.43 ≈ 5.16 USDT)
+      qty: formattedQuantity.toString(), // Use calculated quantity based on balance and percentage allocation
       timeInForce: 'IOC',
       leverage: '1', // Enforce 1x leverage for risk management
     };
