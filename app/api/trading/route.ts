@@ -49,6 +49,21 @@ const TELEGRAM_URL = `https://api.telegram.org/bot8242037075:AAEIYbLIuxIQpEln4aE
 // Small in-memory queue to space messages
 let lastSendTime = 0;
 
+// Symbol alias resolver to match Bybit futures listings
+const SYMBOL_ALIASES: Record<string, string> = {
+  'PUMP': 'PUMPFUN',
+  'PUMPUSDT': 'PUMPFUNUSDT'
+};
+
+function resolveBybitSymbol(inputSymbol: string): string {
+  const upper = inputSymbol.toUpperCase();
+  // Direct alias match
+  if (SYMBOL_ALIASES[upper]) return SYMBOL_ALIASES[upper];
+  // Ensure USDT suffix and re-check
+  const withUsdt = upper.endsWith('USDT') ? upper : `${upper}USDT`;
+  return SYMBOL_ALIASES[withUsdt] || withUsdt;
+}
+
 // Helper function to create signed request for futures trading
 async function makeBybitFuturesRequest(endpoint: string, apiKey: string, secretKey: string, params: Record<string, string | number | boolean> = {}, method: 'GET' | 'POST' = 'POST') {
   const timestamp = Date.now().toString();
@@ -118,8 +133,8 @@ async function makeBybitFuturesRequest(endpoint: string, apiKey: string, secretK
 
 // Helper function to get current price for a futures symbol
 async function getCurrentPrice(symbol: string): Promise<number> {
-  // Ensure symbol has USDT suffix (it might already have it from the frontend)
-  const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+  // Normalize to Bybit-listed futures symbol
+  const tradingSymbol = resolveBybitSymbol(symbol);
   
   // Bybit uses standard format (BTCUSDT)
   const response = await fetch(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${tradingSymbol}`);
@@ -132,8 +147,8 @@ async function getCurrentPrice(symbol: string): Promise<number> {
 
 // Helper function to get futures exchange info for a symbol to get trading rules
 async function getExchangeInfo(symbol: string) {
-  // Ensure symbol has USDT suffix (it might already have it from the frontend)
-  const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+  // Normalize to Bybit-listed futures symbol
+  const tradingSymbol = resolveBybitSymbol(symbol);
   
   console.log('Fetching futures exchange info for symbol:', tradingSymbol);
   const response = await fetch(`https://api.bybit.com/v5/market/instruments-info?category=linear`);
@@ -221,14 +236,15 @@ function formatQuantity(quantity: number, lotSizeFilter: { stepSize: string; min
 // Helper function to set leverage for a symbol (enforces 1x leverage for risk management)
 async function setLeverage(apiKey: string, secretKey: string, symbol: string, leverage: string = '1') {
   try {
+    const tradingSymbol = resolveBybitSymbol(symbol);
     const leverageParams = {
       category: 'linear',
-      symbol: symbol,
+      symbol: tradingSymbol,
       buyLeverage: leverage,
       sellLeverage: leverage,
     };
     
-    console.log(`🔧 Setting leverage to ${leverage}x for ${symbol}`);
+    console.log(`🔧 Setting leverage to ${leverage}x for ${tradingSymbol}`);
     const response = await makeBybitFuturesRequest('/v5/position/set-leverage', apiKey, secretKey, leverageParams);
     console.log(`✅ Leverage set successfully:`, response);
     return response;
@@ -279,8 +295,8 @@ async function getAccountInfo(apiKey: string, secretKey: string) {
 // Helper function to get position information for a specific symbol
 async function getPositionInfo(apiKey: string, secretKey: string, symbol: string) {
   try {
-    // Bybit uses standard format (BTCUSDT)
-    const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+    // Normalize to Bybit-listed futures symbol
+    const tradingSymbol = resolveBybitSymbol(symbol);
     
     console.log(`🔍 Looking for position: ${tradingSymbol}`);
     
@@ -487,7 +503,7 @@ async function openPosition(apiKey: string, secretKey: string, symbol: string, s
     const orderSide = side === 'LONG' ? 'Buy' : 'Sell';
 
     // Execute the order
-    const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+    const tradingSymbol = resolveBybitSymbol(symbol);
     
     // Bybit uses standard format (BTCUSDT)
     
@@ -561,7 +577,7 @@ async function closePosition(apiKey: string, secretKey: string, symbol: string, 
     const closeSide = positionInfo.side === 'Buy' ? 'Sell' : 'Buy';
 
     // Execute the close order
-    const tradingSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+    const tradingSymbol = resolveBybitSymbol(symbol);
     
     // Bybit uses standard format (BTCUSDT)
     
