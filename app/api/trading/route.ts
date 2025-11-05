@@ -201,7 +201,7 @@ async function getExchangeInfo(symbol: string) {
 }
 
 // Helper function to format quantity according to LOT_SIZE filter
-function formatQuantity(quantity: number, lotSizeFilter: { stepSize: string; minQty: string; maxQty: string }): number {
+function formatQuantity(quantity: number, lotSizeFilter: { stepSize: string; minQty: string; maxQty: string }): { value: number; decimalPlaces: number } {
   const stepSize = parseFloat(lotSizeFilter.stepSize);
   const minQty = parseFloat(lotSizeFilter.minQty);
   const maxQty = parseFloat(lotSizeFilter.maxQty);
@@ -212,8 +212,8 @@ function formatQuantity(quantity: number, lotSizeFilter: { stepSize: string; min
   const stepSizeStr = lotSizeFilter.stepSize;
   const decimalPlaces = stepSizeStr.includes('.') ? stepSizeStr.split('.')[1].length : 0;
   
-  // Round to step size using proper decimal precision
-  const steps = Math.floor(quantity / stepSize);
+  // Round to nearest step size (use Math.round instead of Math.floor for better precision)
+  const steps = Math.round(quantity / stepSize);
   let formattedQuantity = steps * stepSize;
   
   // Round to the correct number of decimal places to avoid floating point precision issues
@@ -229,8 +229,8 @@ function formatQuantity(quantity: number, lotSizeFilter: { stepSize: string; min
     formattedQuantity = maxQty;
   }
   
-  console.log('formatQuantity output:', formattedQuantity);
-  return formattedQuantity;
+  console.log('formatQuantity output:', { value: formattedQuantity, decimalPlaces });
+  return { value: formattedQuantity, decimalPlaces };
 }
 
 // Helper function to set leverage for a symbol (enforces 1x leverage for risk management)
@@ -497,7 +497,11 @@ async function openPosition(apiKey: string, secretKey: string, symbol: string, s
     }
 
     // Format quantity according to LOT_SIZE filter
-    const formattedQuantity = formatQuantity(orderQuantity, lotSizeFilter);
+    const formattedQuantityResult = formatQuantity(orderQuantity, lotSizeFilter);
+    const formattedQuantity = formattedQuantityResult.value;
+    
+    // Format quantity as string with correct decimal places for Bybit API
+    const quantityString = formattedQuantity.toFixed(formattedQuantityResult.decimalPlaces);
 
     // Determine the order side (LONG = Buy, SHORT = Sell)
     const orderSide = side === 'LONG' ? 'Buy' : 'Sell';
@@ -515,7 +519,7 @@ async function openPosition(apiKey: string, secretKey: string, symbol: string, s
       symbol: tradingSymbol,
       side: orderSide,
       orderType: 'Market',
-      qty: formattedQuantity.toString(), // Use calculated quantity based on balance and percentage allocation
+      qty: quantityString, // Use formatted quantity string with correct decimal places
       timeInForce: 'IOC',
       leverage: '1', // Enforce 1x leverage for risk management
     };
