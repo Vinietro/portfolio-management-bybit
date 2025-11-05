@@ -151,7 +151,8 @@ async function getExchangeInfo(symbol: string) {
   const tradingSymbol = resolveBybitSymbol(symbol);
   
   console.log('Fetching futures exchange info for symbol:', tradingSymbol);
-  const response = await fetch(`https://api.bybit.com/v5/market/instruments-info?category=linear`);
+  // Query specifically for this symbol to get accurate info
+  const response = await fetch(`https://api.bybit.com/v5/market/instruments-info?category=linear&symbol=${tradingSymbol}`);
   if (!response.ok) {
     const errorText = await response.text();
     console.error('Failed to fetch futures exchange info:', response.status, errorText);
@@ -161,18 +162,18 @@ async function getExchangeInfo(symbol: string) {
   console.log('Futures exchange info response:', data);
   
   if (!data.result?.list || data.result.list.length === 0) {
-    throw new Error(`No futures symbols found in exchange info`);
+    throw new Error(`No futures symbols found in exchange info for ${tradingSymbol}`);
   }
   
   // Find the specific symbol in Bybit futures response
-  const symbolInfo = data.result.list.find((s: BybitSymbolInfo) => s.symbol === tradingSymbol);
+  const symbolInfo = data.result.list.find((s: any) => s.symbol === tradingSymbol);
   if (!symbolInfo) {
     // Log available symbols for debugging
-    const availableSymbols = data.result.list.map((s: BybitSymbolInfo) => s.symbol).slice(0, 20); // First 20 symbols
+    const availableSymbols = data.result.list.map((s: any) => s.symbol).slice(0, 20); // First 20 symbols
     console.log(`❌ Symbol ${tradingSymbol} not found. Available symbols (first 20):`, availableSymbols);
     
     // Check if there's a similar symbol (case insensitive)
-    const similarSymbol = data.result.list.find((s: BybitSymbolInfo) => 
+    const similarSymbol = data.result.list.find((s: any) => 
       s.symbol.toLowerCase() === tradingSymbol.toLowerCase()
     );
     
@@ -184,52 +185,106 @@ async function getExchangeInfo(symbol: string) {
     throw new Error(`Futures symbol ${tradingSymbol} not found in exchange info`);
   }
   
+  // Log the FULL actual symbol info object to see its structure
+  console.log('📊 Full symbol info object for', tradingSymbol, ':', JSON.stringify(symbolInfo, null, 2));
+  
+  // Extract fields - Bybit V5 API nests these in lotSizeFilter object
+  const lotSizeFilter = symbolInfo.lotSizeFilter || {};
+  const stepSize = lotSizeFilter.qtyStep || symbolInfo.qtyStep || symbolInfo.stepSize || '0.00001';
+  const minQty = lotSizeFilter.minOrderQty || symbolInfo.minOrderQty || symbolInfo.minQty || '0.001';
+  const maxQty = lotSizeFilter.maxOrderQty || symbolInfo.maxOrderQty || symbolInfo.maxQty || '1000000';
+  
+  // Calculate quantityPrecision from qtyStep if not provided
+  // qtyStep "0.01" means 2 decimal places, "0.001" means 3, etc.
+  let quantityPrecision = symbolInfo.qtyPrecision ?? symbolInfo.quantityPrecision;
+  if (quantityPrecision === undefined && stepSize) {
+    const stepSizeStr = stepSize.toString();
+    quantityPrecision = stepSizeStr.includes('.') ? stepSizeStr.split('.')[1].length : 0;
+  }
+  
+  const pricePrecision = symbolInfo.pricePrecision || symbolInfo.priceScale;
+  
+  console.log('📊 Extracted symbol info for', tradingSymbol, ':', {
+    symbol: symbolInfo.symbol,
+    stepSize,
+    minQty,
+    maxQty,
+    quantityPrecision,
+    pricePrecision
+  });
+  
   // Transform Bybit futures format to match expected format
   return {
     symbol: symbolInfo.symbol,
-    baseAsset: symbolInfo.baseAsset,
-    quoteAsset: symbolInfo.quoteAsset,
+    baseAsset: symbolInfo.baseAsset || symbolInfo.baseCoin,
+    quoteAsset: symbolInfo.quoteAsset || symbolInfo.quoteCoin,
+    quantityPrecision: quantityPrecision,
     filters: [
       {
         filterType: 'LOT_SIZE',
-        stepSize: symbolInfo.stepSize || '0.00001',
-        minQty: symbolInfo.minQty || '0.001',
-        maxQty: symbolInfo.maxQty || '1000000'
+        stepSize: stepSize || '0.00001',
+        minQty: minQty || '0.001',
+        maxQty: maxQty || '1000000'
       }
     ]
   };
 }
 
 // Helper function to format quantity according to LOT_SIZE filter
-function formatQuantity(quantity: number, lotSizeFilter: { stepSize: string; minQty: string; maxQty: string }): { value: number; decimalPlaces: number } {
+function formatQuantity(quantity: number, lotSizeFilter: { stepSize: string; minQty: string; maxQty: string }, quantityPrecision?: number): { value: number; decimalPlaces: number } {
   const stepSize = parseFloat(lotSizeFilter.stepSize);
   const minQty = parseFloat(lotSizeFilter.minQty);
   const maxQty = parseFloat(lotSizeFilter.maxQty);
   
-  console.log('formatQuantity inputs:', { quantity, stepSize, minQty, maxQty });
+  console.log('formatQuantity inputs:', { quantity, stepSize, minQty, maxQty, quantityPrecision });
   
-  // Calculate decimal places from step size to avoid floating point precision issues
+  // Use quantityPrecision from Bybit API if available, otherwise calculate from stepSize
   const stepSizeStr = lotSizeFilter.stepSize;
-  const decimalPlaces = stepSizeStr.includes('.') ? stepSizeStr.split('.')[1].length : 0;
+  let decimalPlaces: number;
+  if (quantityPrecision !== undefined && quantityPrecision !== null) {
+    decimalPlaces = quantityPrecision;
+  } else {
+    // Calculate decimal places from step size as fallback
+    decimalPlaces = stepSizeStr.includes('.') ? stepSizeStr.split('.')[1].length : 0;
+  }
   
-  // Round to nearest step size (use Math.round instead of Math.floor for better precision)
-  const steps = Math.round(quantity / stepSize);
+  // Round DOWN to step size to ensure we don't exceed available balance
+  // This is safer than rounding to nearest
+  const steps = Math.floor(quantity / stepSize);
+  
+  // Calculate quantity as multiple of stepSize to avoid floating point errors
+  // Use the stepSize string directly to preserve precision
+  const stepSizeDecimalPlaces = stepSizeStr.includes('.') ? stepSizeStr.split('.')[1].length : 0;
+  
+  // Calculate formatted quantity by multiplying steps by stepSize
+  // Then parse it back to ensure it's a valid number
   let formattedQuantity = steps * stepSize;
   
-  // Round to the correct number of decimal places to avoid floating point precision issues
-  formattedQuantity = Math.round(formattedQuantity * Math.pow(10, decimalPlaces)) / Math.pow(10, decimalPlaces);
+  // Round to the stepSize's decimal precision first, then to the quantityPrecision
+  const stepMultiplier = Math.pow(10, stepSizeDecimalPlaces);
+  formattedQuantity = Math.floor(formattedQuantity * stepMultiplier) / stepMultiplier;
+  
+  // Now round to the quantityPrecision decimal places
+  const multiplier = Math.pow(10, decimalPlaces);
+  formattedQuantity = Math.floor(formattedQuantity * multiplier) / multiplier;
   
   // Ensure minimum quantity after rounding
   if (formattedQuantity < minQty) {
-    formattedQuantity = minQty;
+    // Calculate minQty steps to ensure it's a valid step size
+    const minSteps = Math.ceil(minQty / stepSize);
+    formattedQuantity = minSteps * stepSize;
+    formattedQuantity = Math.floor(formattedQuantity * multiplier) / multiplier;
   }
   
   // Ensure maximum quantity
   if (formattedQuantity > maxQty) {
-    formattedQuantity = maxQty;
+    // Calculate maxQty steps
+    const maxSteps = Math.floor(maxQty / stepSize);
+    formattedQuantity = maxSteps * stepSize;
+    formattedQuantity = Math.floor(formattedQuantity * multiplier) / multiplier;
   }
   
-  console.log('formatQuantity output:', { value: formattedQuantity, decimalPlaces });
+  console.log('formatQuantity output:', { value: formattedQuantity, decimalPlaces, steps, stepSize: stepSizeStr });
   return { value: formattedQuantity, decimalPlaces };
 }
 
@@ -496,12 +551,22 @@ async function openPosition(apiKey: string, secretKey: string, symbol: string, s
       };
     }
 
-    // Format quantity according to LOT_SIZE filter
-    const formattedQuantityResult = formatQuantity(orderQuantity, lotSizeFilter);
+    // Format quantity according to LOT_SIZE filter (use quantityPrecision from exchange info)
+    const formattedQuantityResult = formatQuantity(orderQuantity, lotSizeFilter, exchangeInfo.quantityPrecision);
     const formattedQuantity = formattedQuantityResult.value;
     
     // Format quantity as string with correct decimal places for Bybit API
+    // Keep all decimal places as specified by quantityPrecision (don't remove trailing zeros)
     const quantityString = formattedQuantity.toFixed(formattedQuantityResult.decimalPlaces);
+    
+    console.log('📦 Order quantity details:', {
+      rawQuantity: orderQuantity,
+      formattedQuantity,
+      quantityString,
+      decimalPlaces: formattedQuantityResult.decimalPlaces,
+      stepSize: lotSizeFilter.stepSize,
+      minQty: lotSizeFilter.minQty
+    });
 
     // Determine the order side (LONG = Buy, SHORT = Sell)
     const orderSide = side === 'LONG' ? 'Buy' : 'Sell';
