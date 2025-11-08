@@ -3,22 +3,36 @@ import crypto from 'crypto';
 import { neon } from '@neondatabase/serverless';
 import { getAllUserCredentials } from '../../lib/database';
 
-// Type definitions for Bybit API responses
-interface BybitSymbolInfo {
-  symbol: string;
-  size: string;
-  quantityPrecision: number;
-  pricePrecision: number;
-  minQty: string;
-  maxQty: string;
-  stepSize: string;
-  baseAsset: string;
-  quoteAsset: string;
+interface BybitLotSizeFilter {
+  qtyStep?: string;
+  minOrderQty?: string;
+  maxOrderQty?: string;
 }
 
-// Removed unused interface
+interface BybitInstrumentInfo {
+  symbol: string;
+  lotSizeFilter?: BybitLotSizeFilter;
+  qtyStep?: string;
+  qtyPrecision?: number;
+  quantityPrecision?: number;
+  stepSize?: string;
+  minOrderQty?: string;
+  minQty?: string;
+  maxOrderQty?: string;
+  maxQty?: string;
+  pricePrecision?: number;
+  priceScale?: number;
+  baseAsset?: string;
+  baseCoin?: string;
+  quoteAsset?: string;
+  quoteCoin?: string;
+}
 
-// Removed unused interface
+interface BybitInstrumentsResponse {
+  result?: {
+    list?: BybitInstrumentInfo[];
+  };
+}
 
 interface BybitPositionData {
   symbol: string;
@@ -158,23 +172,24 @@ async function getExchangeInfo(symbol: string) {
     console.error('Failed to fetch futures exchange info:', response.status, errorText);
     throw new Error(`Failed to fetch futures exchange info: ${response.status} ${errorText}`);
   }
-  const data = await response.json();
+  const data = (await response.json()) as BybitInstrumentsResponse;
   console.log('Futures exchange info response:', data);
   
-  if (!data.result?.list || data.result.list.length === 0) {
+  const instrumentList = data.result?.list ?? [];
+  if (instrumentList.length === 0) {
     throw new Error(`No futures symbols found in exchange info for ${tradingSymbol}`);
   }
   
   // Find the specific symbol in Bybit futures response
-  const symbolInfo = data.result.list.find((s: any) => s.symbol === tradingSymbol);
+  const symbolInfo = instrumentList.find((instrument) => instrument.symbol === tradingSymbol);
   if (!symbolInfo) {
     // Log available symbols for debugging
-    const availableSymbols = data.result.list.map((s: any) => s.symbol).slice(0, 20); // First 20 symbols
+    const availableSymbols = instrumentList.map((instrument) => instrument.symbol).slice(0, 20); // First 20 symbols
     console.log(`❌ Symbol ${tradingSymbol} not found. Available symbols (first 20):`, availableSymbols);
     
     // Check if there's a similar symbol (case insensitive)
-    const similarSymbol = data.result.list.find((s: any) => 
-      s.symbol.toLowerCase() === tradingSymbol.toLowerCase()
+    const similarSymbol = instrumentList.find(
+      (instrument) => instrument.symbol.toLowerCase() === tradingSymbol.toLowerCase()
     );
     
     if (similarSymbol) {
